@@ -9,9 +9,9 @@ Recent problems (avoid repeating): {recent_problems}
 
 Return ONLY valid JSON with no markdown, no explanation, no code fences. The JSON must have exactly these fields:
 - "problem_text": the problem as a plain string the student will read
-- "sympy_expression": a valid Python/SymPy expression that evaluates to the correct numeric answer. Never pre-compute it yourself — write the raw computation so the system can evaluate it. Rules by topic:
-  - Fractions / arithmetic: use Rational(a,b). Examples: "Rational(1,6) + Rational(2,3)", "Rational(3,4) * Rational(2,5)"
-  - Algebra (solve for x): use solve(). Examples: "solve(2*x + 5 - 11, x)", "solve(3*x - 9, x)"
+- "sympy_expression": a valid Python/SymPy expression. Rules by topic:
+  - Fractions / arithmetic: write the raw computation using Rational(a,b). Examples: "Rational(1,6) + Rational(2,3)", "Rational(3,4) * Rational(2,5)"
+  - Algebra (equation to solve): use Eq(lhs, rhs) to express the equation exactly as written. Examples: "Eq(2*x + 5, 11)", "Eq(3*x - 9, 12)". The system will call solve() itself — do NOT call solve() yourself.
   - Geometry / other numeric: plain arithmetic. Examples: "3 * 4", "Rational(1,2) * 6 * 4"
 - "topic": the topic string exactly as given
 - "subtopic": the subtopic string exactly as given

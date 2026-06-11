@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from langchain_ollama import ChatOllama
-from sympy import simplify, sympify
+from sympy import Eq, simplify, solve, sympify
 
 from src.agent.state import TutorState
 from src.agent.prompts import (
@@ -148,14 +148,32 @@ def generate_problem_node(state: TutorState) -> dict:
             expr_str = data.get("sympy_expression", "").strip()
             if pt and expr_str:
                 # Evaluate the expression ourselves — never trust the LLM's arithmetic
-                computed = sympify(expr_str, locals={"Rational": __import__("sympy").Rational}, rational=True)
-                # solve() returns a list; unwrap single-element solutions
-                if isinstance(computed, list):
+                computed = sympify(
+                    expr_str,
+                    locals={"Rational": __import__("sympy").Rational, "Eq": Eq},
+                    rational=True,
+                )
+                # Eq(lhs, rhs) — solve for the single free symbol
+                if isinstance(computed, Eq):
+                    free = computed.free_symbols
+                    if len(free) != 1:
+                        continue
+                    solutions = solve(computed, list(free)[0])
+                    if len(solutions) != 1:
+                        continue
+                    candidate = solutions[0]
+                    # Verify: substitute back — catches LLM typos in the equation
+                    check = computed.subs(list(free)[0], candidate)
+                    if not check:
+                        continue
+                    computed = candidate
+                # solve() returning a list (legacy path)
+                elif isinstance(computed, list):
                     if len(computed) != 1:
                         continue
                     computed = computed[0]
                 if computed.free_symbols:
-                    continue  # expression still contains unknowns, retry
+                    continue  # still symbolic, retry
                 problem_text = pt
                 sympy_answer = str(computed)
                 break

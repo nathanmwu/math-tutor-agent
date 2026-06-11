@@ -58,14 +58,23 @@ def _parse_response(raw):
 
 
 def _evaluate_expression(expr_str):
-    """Evaluate sympy_expression to a concrete value.
-    Handles solve() returning a list by unwrapping single-element results."""
+    """Evaluate sympy_expression to a concrete numeric value.
+    Handles Eq(lhs, rhs) by solving, and solve() lists by unwrapping."""
+    from sympy import Eq as SymEq, solve as sym_solve
     result = sympify(
         expr_str,
-        locals={"Rational": __import__("sympy").Rational},
+        locals={"Rational": __import__("sympy").Rational, "Eq": SymEq},
         rational=True,
     )
-    if isinstance(result, list):
+    if isinstance(result, SymEq):
+        free = result.free_symbols
+        if len(free) != 1:
+            raise ValueError(f"Eq has {len(free)} free symbols: {free}")
+        solutions = sym_solve(result, list(free)[0])
+        if len(solutions) != 1:
+            raise ValueError(f"Eq has {len(solutions)} solutions: {solutions}")
+        result = solutions[0]
+    elif isinstance(result, list):
         if len(result) != 1:
             raise ValueError(f"solve() returned {len(result)} solutions: {result}")
         result = result[0]
