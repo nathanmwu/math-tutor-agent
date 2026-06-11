@@ -98,7 +98,7 @@ math-tutor-agent/
 │                                                 │
 │  load_state → select_topic → generate_problem  │
 │                                    ↓            │
-│                              [UI PAUSE]         │
+│                         [PAUSE — student reads] │
 │                                    ↓            │
 │                           evaluate_answer       │
 │                                    ↓            │
@@ -106,7 +106,7 @@ math-tutor-agent/
 │                                    ↓            │
 │                          generate_feedback      │
 │                                    ↓            │
-│                    update_state → adapt_next ──▶│ (loop)
+│                    update_state → adapt_next → END
 └─────────────────┬───────────────────────────────┘
                   │
      ┌────────────┴────────────┐
@@ -127,12 +127,13 @@ math-tutor-agent/
 1. `load_state_node` reads the student's JSON file, loading mastery scores into the graph state
 2. `select_topic_node` picks the topic with the lowest mastery (70% of the time) or an unexplored topic (30%)
 3. `generate_problem_node` calls Ollama with a structured prompt, asking for both problem text and a SymPy expression representing the computation. The node evaluates the expression itself — the LLM's arithmetic is never trusted
-4. **Graph pauses** — the UI renders the problem and waits for the student
+4. **Graph pauses** (`interrupt_before=["evaluate_answer_node"]`) — the UI renders the problem and the student submits an answer
 5. `evaluate_answer_node` runs `symbolic_check()`: parses the student's input with SymPy and checks `simplify(student - correct) == 0`. If wrong, calls Ollama to categorize the error type
-6. `retrieve_explanation_node` queries ChromaDB with topic, subtopic, difficulty, and (if available) error category filters, returning the 3 most relevant knowledge chunks
-7. `generate_feedback_node` calls Ollama with the retrieved chunks injected — the LLM explains the correct answer using verified educational content, not its parametric memory
+6. `retrieve_explanation_node` queries ChromaDB using the **problem text** as the semantic query (with topic/subtopic/difficulty/error-category metadata filters), returning the 3 most relevant knowledge chunks
+7. `generate_feedback_node` calls Ollama with the retrieved chunks injected — produces a structured explanation: *Result*, *Explanation* (step-by-step), and *What went wrong* (for incorrect answers, grounded in the error category)
 8. `update_state_node` updates the mastery score with an EMA, adjusts difficulty, and saves to disk
-9. `adapt_next_node` sets up the next problem's topic and difficulty, and the loop continues
+9. `adapt_next_node` sets up the next topic and difficulty in state, then the graph reaches **END**
+10. **UI enters reviewing phase** — the problem, the student's answer, and the full explanation are displayed together. The student clicks "Next problem →" to trigger a new turn from step 1
 
 ---
 
@@ -143,17 +144,20 @@ math-tutor-agent/
 LangGraph is used to define the tutoring session as an explicit state machine rather than an open-ended agent. Each step is a typed node that reads from and writes to `TutorState` (a `TypedDict`). The graph is compiled with:
 
 - **`MemorySaver` checkpointer**: snapshots the full state after each node, keyed by `thread_id` (the student's name). Sessions resume from exactly where they left off.
-- **`interrupt_before=["evaluate_answer_node"]`**: the graph pauses execution before evaluation and hands control back to the UI. When the student submits, the UI injects the answer via `graph.update_state()` and calls `graph.stream(None)` to resume.
+- **`interrupt_before=["evaluate_answer_node"]`**: the graph pauses before evaluation and hands control back to the UI. When the student submits, the UI injects the answer via `graph.update_state()` and calls `graph.stream(None)` to resume.
 
-This is the pattern that enables human-in-the-loop interaction without polling or threading.
+This is the pattern that enables human-in-the-loop interaction without polling or threading. The graph reaches `END` after `adapt_next_node` — it does **not** loop back automatically. This keeps the feedback and the answered problem on screen until the student explicitly requests the next one.
 
 ```python
-# Pause: graph runs load → select → generate, then stops
+# Turn start: graph runs load → select → generate, pauses before evaluate
 graph.stream(initial_state, config={"configurable": {"thread_id": "alice"}})
 
-# Resume: inject answer, continue from evaluate onward
+# Student submits: inject answer, run evaluate → retrieve → feedback → update → adapt → END
 graph.update_state(config, {"student_answer": "3/4"})
 graph.stream(None, config=config)
+
+# Student clicks "Next problem": start a fresh turn
+graph.stream({"student_answer": ""}, config=config)
 ```
 
 Why LangGraph over LangChain's `AgentExecutor`: the tutoring session has a fixed, well-defined sequence of steps. An explicit graph is more predictable, easier to debug, and clearer to reason about than an open-ended ReAct loop that decides at runtime what to do next.
@@ -170,10 +174,13 @@ When a student answers a problem, `retrieve_explanation_node` queries ChromaDB w
 The retrieved text is then injected directly into the feedback generation prompt. This is the RAG pattern: the LLM generates explanations grounded in verified content, not just trained intuition.
 
 ```
-Query: topic=algebra, subtopic=linear_equations, difficulty≤3, misconception_tag=sign_error
-→ Returns: 3 chunks explaining sign errors in equation solving
-→ Injected into: feedback prompt
+Semantic query: the full problem text (e.g. "Solve for x: 2x + 5 = 11")
+Metadata filters: topic=algebra, subtopic=linear_equations, misconception_tag=sign_error
+→ Returns: 3 chunks semantically close to this specific problem
+→ Injected into: feedback prompt as reference material
 ```
+
+Using the problem text as the semantic query (rather than just `"algebra linear_equations"`) means the embedding search finds chunks that are relevant to the specific numbers and structure of the problem, not just the topic in general.
 
 Embeddings are generated locally using `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions, CPU-compatible). ChromaDB persists to `data/chromadb/` as a local file store — no server or Docker required.
 

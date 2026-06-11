@@ -11,13 +11,16 @@ def retrieve_content(
     chroma_dir: Path,
     error_category: str | None = None,
     n_results: int = 3,
+    query_text: str | None = None,
 ) -> list[str]:
     collection = get_or_create_collection(chroma_dir)
     total_docs = collection.count()
     if total_docs == 0:
         return []
 
-    query_text = f"{topic} {subtopic}" if subtopic else topic
+    # Use the problem text as the semantic query when available — more specific than topic/subtopic alone
+    if not query_text:
+        query_text = f"{topic} {subtopic}" if subtopic else topic
 
     def build_where(extra: dict | None = None) -> dict:
         conditions: list[dict] = [{"topic": {"$eq": topic}}]

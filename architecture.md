@@ -40,9 +40,9 @@
 │                                                     ▼               │
 │  ┌─────────────┐   ┌────────────────┐   ┌──────────────────────┐   │
 │  │ update_state│◀──│  adapt_next    │◀──│  generate_feedback   │   │
-│  └──────┬──────┘   └────────────────┘   │  Ollama + chunks     │   │
-│         │                               └──────────────────────┘   │
-│         └────────────────────────────── loop ──────────────────▶   │
+│  └──────┬──────┘   └───────┬────────┘   │  Ollama + chunks     │   │
+│         │                 END           └──────────────────────┘   │
+│         │  (UI shows feedback; student clicks Next to start again)  │
 └─────────────────────────────────────────────────────────────────────┘
          │                          │
 ┌────────▼─────────┐    ┌──────────▼──────────┐
@@ -111,8 +111,14 @@
    └─ StudentState.save() → writes data/students/{id}.json
 
 8. adapt_next
-   └─ Sets next topic and difficulty in TutorState for next loop iteration
-   └─ Graph loops back to generate_problem
+   └─ Sets next topic and difficulty in TutorState
+   └─ Graph reaches END — state is preserved by MemorySaver checkpointer
+
+9. UI enters reviewing phase
+   └─ Displays the answered problem, student's answer, and full LLM explanation
+   └─ Student clicks "Next problem →"
+   └─ UI triggers a new turn: graph.stream({"student_answer": ""}, config)
+   └─ Graph resumes from START: load_state → select_topic → generate_problem → pause
 ```
 
 ---

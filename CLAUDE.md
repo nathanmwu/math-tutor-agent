@@ -16,7 +16,7 @@ The system is not trying to be production-scale. It is trying to be *correct*, *
 | Technique | Where in the codebase | Why it's here |
 |---|---|---|
 | **RAG (Retrieval-Augmented Generation)** | `src/knowledge/` + `src/agent/nodes.py:retrieve_explanation` | Grounds LLM feedback in verified educational content rather than parametric memory |
-| **Agentic loop with tool use** | `src/agent/graph.py` | LangGraph StateGraph drives a deterministic multi-step loop: generate → present → evaluate → retrieve → feedback → adapt |
+| **Agentic loop with tool use** | `src/agent/graph.py` | LangGraph StateGraph drives a deterministic sequence: generate → pause → evaluate → retrieve → feedback → adapt → END. The UI advances to the next turn explicitly. |
 | **Adaptive behavior** | `src/agent/nodes.py:adapt_next` + `src/state/` | Student mastery tracked per topic via EMA; difficulty and topic selection adjust each turn |
 | **Persistent student state** | `src/state/models.py` + `data/students/` | Pydantic models serialized to per-student JSON; survives session restarts |
 | **Symbolic answer verification** | `src/agent/nodes.py:evaluate_answer` via SymPy | Deterministic math evaluation — right/wrong is never delegated to an LLM |
@@ -32,13 +32,15 @@ Streamlit UI
 LangGraph StateGraph (TutorState)
     ├── load_state         → reads data/students/{id}.json
     ├── select_topic       → weakest topic or next curriculum slot
-    ├── generate_problem   → Ollama (llama3:8b) → structured JSON
-    ├── present_problem    → UI pause point
+    ├── generate_problem   → Ollama (llama3.1:8b) → structured JSON; SymPy evaluates expression
+    ├── [PAUSE]            → UI renders problem, student submits answer
     ├── evaluate_answer    → SymPy symbolic check (deterministic)
     │                         + Ollama error categorization (wrong only)
-    ├── retrieve_explanation → ChromaDB RAG over knowledge base
-    ├── generate_feedback  → Ollama with retrieved chunks
-    └── update_state       → EMA mastery update + write JSON
+    ├── retrieve_explanation → ChromaDB RAG (problem text as semantic query)
+    ├── generate_feedback  → Ollama with retrieved chunks; structured Result/Explanation/Error sections
+    ├── update_state       → EMA mastery update + write JSON
+    └── adapt_next         → sets next difficulty/topic → END
+                              UI shows feedback; "Next problem" triggers a new turn from load_state
 ```
 
 Full system design: see [architecture.md](architecture.md).

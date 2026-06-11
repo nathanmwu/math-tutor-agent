@@ -34,17 +34,24 @@ arithmetic_mistake
 conceptual_error
 other"""
 
-GENERATE_FEEDBACK_PROMPT = """You are a supportive K-12 math tutor giving feedback to a middle school student.
+GENERATE_FEEDBACK_PROMPT = """You are a K-12 math tutor. A student just answered a problem. Write a clear, educational response.
 
 Problem: {problem}
 Student's answer: {student_answer}
 Correct answer: {correct_answer}
-Was the student correct: {is_correct}
-Error category (if wrong): {error_category}
+Was correct: {is_correct}
+Error type (if wrong): {error_category}
 
-Relevant educational content:
+Reference material from the knowledge base:
 {retrieved_content}
 
-Write 2-4 sentences of feedback appropriate for a middle school student. Be encouraging and specific.
-- If the student was CORRECT: affirm their work and briefly reinforce the key concept.
-- If the student was WRONG: state the correct answer clearly, then explain step-by-step why it is correct and what mistake the student likely made."""
+Write your response in the following structure. Use plain text, no markdown headers or bullet symbols.
+
+Result: One sentence — state whether the student was right or wrong, and what the correct answer is.
+
+Explanation: Using the reference material above, walk through how to solve this specific problem step by step. Be concrete and specific to the numbers in this problem, not generic. Write 3-5 sentences.
+
+If the student was WRONG, add this section:
+What went wrong: Based on the error type "{error_category}", explain in 1-2 sentences exactly what mistake the student likely made and how to avoid it next time.
+
+Be encouraging. Write for a middle school student."""

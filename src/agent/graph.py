@@ -37,6 +37,8 @@ builder.add_edge("evaluate_answer_node", "retrieve_explanation_node")
 builder.add_edge("retrieve_explanation_node", "generate_feedback_node")
 builder.add_edge("generate_feedback_node", "update_state_node")
 builder.add_edge("update_state_node", "adapt_next_node")
-builder.add_edge("adapt_next_node", "generate_problem_node")
+# Stop after feedback so the answered problem + explanation stay on screen.
+# The UI starts a new turn (a fresh problem) when the student clicks "Next problem".
+builder.add_edge("adapt_next_node", END)
 
 graph = builder.compile(checkpointer=memory, interrupt_before=["evaluate_answer_node"])

@@ -228,6 +228,7 @@ def retrieve_explanation_node(state: TutorState) -> dict:
         difficulty=state["current_difficulty"],
         chroma_dir=CHROMA_DIR,
         error_category=error_category,
+        query_text=state.get("current_problem"),
     )
     return {"retrieved_chunks": chunks}
 

@@ -25,6 +25,20 @@ NODE_LABELS = {
     "adapt_next_node":          "Adjusting difficulty",
 }
 
+
+def run_until_pause(graph_input, config, status_label):
+    """Stream the graph from its current point to the next interrupt (or END),
+    showing a live per-node status. Returns the resulting state values."""
+    with st.status(status_label, expanded=True) as status:
+        for chunk in graph.stream(graph_input, config=config, stream_mode="updates"):
+            node_name = list(chunk.keys())[0]
+            label = NODE_LABELS.get(node_name, node_name)
+            status.update(label=f"⚙ {label}…")
+            st.write(f"✓ {label}")
+        status.update(label="Done", state="complete", expanded=False)
+    return graph.get_state(config).values
+
+
 st.set_page_config(page_title="Math Tutor", page_icon="📐", layout="centered")
 st.title("📐 Math Tutor")
 
@@ -43,38 +57,30 @@ if st.session_state.student_id is None:
 student_id = st.session_state.student_id
 config = THREAD_CONFIG(student_id)
 
-# ── Bootstrap: run graph until first interrupt ────────────────────────────────
+# ── Bootstrap: generate the first problem ─────────────────────────────────────
 if "graph_started" not in st.session_state:
-    with st.status("Starting session…", expanded=True) as status:
-        initial: TutorState = {
-            "student_id": student_id,
-            "current_topic": "",
-            "current_subtopic": "",
-            "current_difficulty": 2,
-            "current_problem": "",
-            "sympy_answer": "",
-            "student_answer": "",
-            "evaluation": {},
-            "retrieved_chunks": [],
-            "feedback": "",
-            "mastery": {},
-            "session_history": [],
-        }
-        for chunk in graph.stream(initial, config=config, stream_mode="updates"):
-            node_name = list(chunk.keys())[0]
-            label = NODE_LABELS.get(node_name, node_name)
-            status.update(label=f"⚙ {label}…")
-            st.write(f"✓ {label}")
-        status.update(label="Ready!", state="complete", expanded=False)
-
+    initial: TutorState = {
+        "student_id": student_id,
+        "current_topic": "",
+        "current_subtopic": "",
+        "current_difficulty": 2,
+        "current_problem": "",
+        "sympy_answer": "",
+        "student_answer": "",
+        "evaluation": {},
+        "retrieved_chunks": [],
+        "feedback": "",
+        "mastery": {},
+        "session_history": [],
+    }
+    run_until_pause(initial, config, "Starting session…")
     st.session_state.graph_started = True
-    st.session_state.awaiting_answer = True
+    st.session_state.phase = "answering"   # "answering" | "reviewing"
     st.session_state.last_feedback = None
     st.session_state.attempt_count = 0
 
 # ── Read current graph state ──────────────────────────────────────────────────
-graph_state = graph.get_state(config)
-state_values: TutorState = graph_state.values
+state_values: TutorState = graph.get_state(config).values
 
 # ── Sidebar: mastery dashboard ────────────────────────────────────────────────
 with st.sidebar:
@@ -89,17 +95,6 @@ with st.sidebar:
         st.write(f"**{label}**")
         st.progress(score, text=f"{score:.0%}")
 
-# ── Show last feedback if available ──────────────────────────────────────────
-if st.session_state.get("last_feedback"):
-    fb = st.session_state.last_feedback
-    if fb.get("is_correct"):
-        st.success(f"✓ Correct!  {fb['feedback']}")
-    elif fb.get("parse_error"):
-        st.warning(f"⚠ Couldn't parse your answer as a number.  {fb['feedback']}")
-    else:
-        st.error(f"✗ Not quite.  {fb['feedback']}")
-    st.session_state.last_feedback = None
-
 # ── Current problem ───────────────────────────────────────────────────────────
 topic = state_values.get("current_topic", "")
 subtopic = state_values.get("current_subtopic", "")
@@ -112,28 +107,61 @@ if topic:
 
 st.markdown(f"### {problem_text}" if problem_text else "### Loading problem…")
 
-# ── Answer form ───────────────────────────────────────────────────────────────
-with st.form("answer_form", clear_on_submit=True):
-    answer = st.text_input("Your answer", placeholder="e.g.  5  or  3/4  or  x=2")
-    submitted = st.form_submit_button("Submit")
+# ══════════════════════════════════════════════════════════════════════════════
+# ANSWERING PHASE — show the answer form
+# ══════════════════════════════════════════════════════════════════════════════
+if st.session_state.phase == "answering":
+    with st.form("answer_form", clear_on_submit=True):
+        answer = st.text_input("Your answer", placeholder="e.g.  5  or  3/4  or  x=2")
+        submitted = st.form_submit_button("Submit")
 
-if submitted and answer.strip():
-    graph.update_state(config, {"student_answer": answer.strip()})
+    if submitted and answer.strip():
+        student_answer_text = answer.strip()
+        graph.update_state(config, {"student_answer": student_answer_text})
 
-    with st.status("Checking your answer…", expanded=True) as status:
-        for chunk in graph.stream(None, config=config, stream_mode="updates"):
-            node_name = list(chunk.keys())[0]
-            label = NODE_LABELS.get(node_name, node_name)
-            status.update(label=f"⚙ {label}…")
-            st.write(f"✓ {label}")
-        status.update(label="Done!", state="complete", expanded=False)
+        # Resume from the interrupt: evaluate → retrieve → feedback → update → adapt → END
+        updated = run_until_pause(None, config, "Checking your answer…")
+        evaluation = updated.get("evaluation", {})
 
-    updated = graph.get_state(config).values
-    evaluation = updated.get("evaluation", {})
-    st.session_state.last_feedback = {
-        "is_correct": evaluation.get("is_correct", False),
-        "parse_error": evaluation.get("parse_error", False),
-        "feedback": updated.get("feedback", ""),
-    }
-    st.session_state.attempt_count += 1
-    st.rerun()
+        st.session_state.last_feedback = {
+            "is_correct": evaluation.get("is_correct", False),
+            "parse_error": evaluation.get("parse_error", False),
+            "error_category": evaluation.get("error_category"),
+            "feedback": updated.get("feedback", ""),
+            "problem": problem_text,
+            "student_answer": student_answer_text,
+        }
+        st.session_state.attempt_count += 1
+        st.session_state.phase = "reviewing"
+        st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REVIEWING PHASE — show full feedback + "Next problem" button
+# ══════════════════════════════════════════════════════════════════════════════
+elif st.session_state.phase == "reviewing":
+    fb = st.session_state.last_feedback or {}
+
+    if fb.get("is_correct"):
+        st.success(f"✓ Correct!  Your answer: **{fb.get('student_answer', '')}**")
+    elif fb.get("parse_error"):
+        st.warning(f"⚠ Couldn't read your answer as a number.  You entered: **{fb.get('student_answer', '')}**")
+    else:
+        cat = fb.get("error_category")
+        cat_note = f"  ·  error type: *{cat}*" if cat else ""
+        st.error(f"✗ Not quite.  Your answer: **{fb.get('student_answer', '')}**{cat_note}")
+
+    # Full LLM explanation — preserve section structure regardless of LLM newline habits
+    feedback_text = fb.get("feedback", "") or "_No explanation was generated._"
+    for section in ("Result:", "Explanation:", "What went wrong:"):
+        feedback_text = feedback_text.replace(section, f"\n\n**{section}**")
+
+    with st.container(border=True):
+        st.markdown(feedback_text.strip())
+
+    if st.button("Next problem →", type="primary"):
+        # Start a fresh turn: load_state → select_topic → generate_problem → pause.
+        # generate_problem_node clears the previous answer/evaluation/feedback.
+        run_until_pause({"student_answer": ""}, config, "Generating next problem…")
+        st.session_state.last_feedback = None
+        st.session_state.phase = "answering"
+        st.rerun()
