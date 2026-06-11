@@ -14,6 +14,17 @@ from src.agent.state import TutorState
 
 THREAD_CONFIG = lambda sid: {"configurable": {"thread_id": sid}}
 
+NODE_LABELS = {
+    "load_state_node":          "Loading student profile",
+    "select_topic_node":        "Selecting topic and difficulty",
+    "generate_problem_node":    "Generating problem (Ollama)",
+    "evaluate_answer_node":     "Checking answer (SymPy symbolic solver)",
+    "retrieve_explanation_node": "Searching knowledge base (ChromaDB RAG)",
+    "generate_feedback_node":   "Writing feedback (Ollama)",
+    "update_state_node":        "Saving progress and updating mastery",
+    "adapt_next_node":          "Adjusting difficulty",
+}
+
 st.set_page_config(page_title="Math Tutor", page_icon="📐", layout="centered")
 st.title("📐 Math Tutor")
 
@@ -34,7 +45,7 @@ config = THREAD_CONFIG(student_id)
 
 # ── Bootstrap: run graph until first interrupt ────────────────────────────────
 if "graph_started" not in st.session_state:
-    with st.spinner("Loading your session…"):
+    with st.status("Starting session…", expanded=True) as status:
         initial: TutorState = {
             "student_id": student_id,
             "current_topic": "",
@@ -49,7 +60,13 @@ if "graph_started" not in st.session_state:
             "mastery": {},
             "session_history": [],
         }
-        graph.invoke(initial, config=config)
+        for chunk in graph.stream(initial, config=config, stream_mode="updates"):
+            node_name = list(chunk.keys())[0]
+            label = NODE_LABELS.get(node_name, node_name)
+            status.update(label=f"⚙ {label}…")
+            st.write(f"✓ {label}")
+        status.update(label="Ready!", state="complete", expanded=False)
+
     st.session_state.graph_started = True
     st.session_state.awaiting_answer = True
     st.session_state.last_feedback = None
@@ -73,24 +90,25 @@ with st.sidebar:
         st.progress(score, text=f"{score:.0%}")
 
 # ── Show last feedback if available ──────────────────────────────────────────
-if st.session_state.last_feedback:
+if st.session_state.get("last_feedback"):
     fb = st.session_state.last_feedback
     if fb.get("is_correct"):
         st.success(f"✓ Correct!  {fb['feedback']}")
     elif fb.get("parse_error"):
-        st.warning(f"⚠️ Couldn't parse your answer. {fb['feedback']}")
+        st.warning(f"⚠ Couldn't parse your answer as a number.  {fb['feedback']}")
     else:
         st.error(f"✗ Not quite.  {fb['feedback']}")
     st.session_state.last_feedback = None
 
 # ── Current problem ───────────────────────────────────────────────────────────
 topic = state_values.get("current_topic", "")
+subtopic = state_values.get("current_subtopic", "")
 difficulty = state_values.get("current_difficulty", 1)
 problem_text = state_values.get("current_problem", "")
 
 difficulty_label = {1: "Intro", 2: "Easy", 3: "Medium", 4: "Hard", 5: "Challenge"}.get(difficulty, "")
 if topic:
-    st.caption(f"{topic.capitalize()}  ·  {difficulty_label}")
+    st.caption(f"{topic.capitalize()} · {subtopic.replace('_', ' ')}  ·  {difficulty_label}")
 
 st.markdown(f"### {problem_text}" if problem_text else "### Loading problem…")
 
@@ -100,9 +118,15 @@ with st.form("answer_form", clear_on_submit=True):
     submitted = st.form_submit_button("Submit")
 
 if submitted and answer.strip():
-    with st.spinner("Checking…"):
-        graph.update_state(config, {"student_answer": answer.strip()})
-        graph.invoke(None, config=config)
+    graph.update_state(config, {"student_answer": answer.strip()})
+
+    with st.status("Checking your answer…", expanded=True) as status:
+        for chunk in graph.stream(None, config=config, stream_mode="updates"):
+            node_name = list(chunk.keys())[0]
+            label = NODE_LABELS.get(node_name, node_name)
+            status.update(label=f"⚙ {label}…")
+            st.write(f"✓ {label}")
+        status.update(label="Done!", state="complete", expanded=False)
 
     updated = graph.get_state(config).values
     evaluation = updated.get("evaluation", {})

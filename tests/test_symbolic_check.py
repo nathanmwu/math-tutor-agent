@@ -128,6 +128,29 @@ def test_algebra_negative_solution():
 def test_algebra_fraction_solution():
     assert symbolic_check("3/2", "3/2") is True
 
+def test_algebra_x_equals_format():
+    # student writes "x=3" — common for equation problems
+    assert symbolic_check("x=3", "3") is True
+
+def test_algebra_x_equals_with_spaces():
+    assert symbolic_check("x = 3", "3") is True
+
+def test_algebra_x_equals_negative():
+    assert symbolic_check("x = -2", "-2") is True
+
+def test_algebra_x_equals_fraction():
+    assert symbolic_check("y = 5/2", "5/2") is True
+
+def test_algebra_x_equals_mixed_number():
+    assert symbolic_check("x = 1 1/2", "3/2") is True
+
+def test_algebra_x_equals_wrong():
+    assert symbolic_check("x=4", "3") is False
+
+def test_algebra_bare_variable_still_none():
+    # "x" alone with no value is still unparseable
+    assert symbolic_check("x", "3") is None
+
 
 # ── Unparseable / garbage input ───────────────────────────────────────────────
 

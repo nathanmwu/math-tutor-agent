@@ -43,6 +43,9 @@ def symbolic_check(student_input: str, sympy_answer: str) -> bool | None:
     try:
         cleaned = student_input.strip()
 
+        # Strip "x = " prefix so students can write "x = 3" for algebra answers
+        cleaned = re.sub(r"^[a-zA-Z_]\w*\s*=\s*", "", cleaned).strip()
+
         mixed = re.search(r"(\d+)\s+(\d+)/(\d+)", cleaned)
         if mixed:
             whole = int(mixed.group(1))
@@ -146,8 +149,13 @@ def generate_problem_node(state: TutorState) -> dict:
             if pt and expr_str:
                 # Evaluate the expression ourselves — never trust the LLM's arithmetic
                 computed = sympify(expr_str, locals={"Rational": __import__("sympy").Rational}, rational=True)
+                # solve() returns a list; unwrap single-element solutions
+                if isinstance(computed, list):
+                    if len(computed) != 1:
+                        continue
+                    computed = computed[0]
                 if computed.free_symbols:
-                    continue  # expression contains unknowns, retry
+                    continue  # expression still contains unknowns, retry
                 problem_text = pt
                 sympy_answer = str(computed)
                 break
@@ -233,6 +241,7 @@ def generate_feedback_node(state: TutorState) -> dict:
     prompt = GENERATE_FEEDBACK_PROMPT.format(
         problem=state["current_problem"],
         student_answer=state["student_answer"],
+        correct_answer=state["sympy_answer"],
         is_correct=evaluation.get("is_correct", False),
         error_category=evaluation.get("error_category"),
         retrieved_content=retrieved_content,
