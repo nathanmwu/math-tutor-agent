@@ -1,0 +1,67 @@
+from pathlib import Path
+import chromadb
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+from src.knowledge.loader import get_or_create_collection, EMBEDDING_MODEL
+
+
+def retrieve_content(
+    topic: str,
+    subtopic: str | None,
+    difficulty: int,
+    chroma_dir: Path,
+    error_category: str | None = None,
+    n_results: int = 3,
+) -> list[str]:
+    collection = get_or_create_collection(chroma_dir)
+    total_docs = collection.count()
+    if total_docs == 0:
+        return []
+
+    query_text = f"{topic} {subtopic}" if subtopic else topic
+
+    def build_where(extra: dict | None = None) -> dict:
+        conditions: list[dict] = [{"topic": {"$eq": topic}}]
+        if subtopic:
+            conditions.append({"subtopic": {"$eq": subtopic}})
+        if extra:
+            for key, value in extra.items():
+                conditions.append({key: {"$eq": value}})
+        if len(conditions) == 1:
+            return conditions[0]
+        return {"$and": conditions}
+
+    if error_category:
+        misconception_where = build_where({"misconception_tag": error_category})
+        miscon_n = min(n_results, total_docs)
+        miscon_results = collection.query(
+            query_texts=[query_text],
+            n_results=miscon_n,
+            where=misconception_where,
+        )
+        found_docs: list[str] = miscon_results["documents"][0]
+        found_ids: set[str] = set(miscon_results["ids"][0])
+
+        if len(found_docs) < n_results:
+            remaining = n_results - len(found_docs)
+            general_where = build_where()
+            general_n = min(remaining + len(found_docs), total_docs)
+            general_results = collection.query(
+                query_texts=[query_text],
+                n_results=general_n,
+                where=general_where,
+            )
+            for doc_id, doc in zip(general_results["ids"][0], general_results["documents"][0]):
+                if doc_id not in found_ids and len(found_docs) < n_results:
+                    found_docs.append(doc)
+                    found_ids.add(doc_id)
+
+        return found_docs
+
+    general_where = build_where()
+    safe_n = min(n_results, total_docs)
+    results = collection.query(
+        query_texts=[query_text],
+        n_results=safe_n,
+        where=general_where,
+    )
+    return results["documents"][0]

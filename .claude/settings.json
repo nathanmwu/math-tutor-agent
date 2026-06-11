@@ -2,7 +2,19 @@
   "permissions": {
     "allow": [
       "Bash(git *)",
-      "Bash(gh *)"
+      "Bash(gh *)",
+      "Bash(.venv/bin/python *)",
+      "Bash(.venv/bin/pip *)",
+      "Bash(.venv/bin/streamlit *)",
+      "Bash(python3 *)",
+      "Bash(pip3 *)",
+      "Bash(streamlit *)",
+      "Bash(mkdir *)",
+      "Bash(touch *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(cat *)",
+      "Bash(ls *)"
     ]
   }
 }

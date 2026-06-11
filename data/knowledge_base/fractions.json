@@ -1,0 +1,222 @@
+[
+  {
+    "id": "fractions_equivalent_fractions_concept_001",
+    "text": "Two fractions are equivalent if they represent the same portion of a whole, even though they use different numbers. You can create an equivalent fraction by multiplying or dividing both the numerator (top number) and the denominator (bottom number) by the same nonzero value. For example, 1/2 = 2/4 = 3/6 = 50/100, because in each case you multiplied top and bottom by the same number. This works because you are essentially multiplying by a form of 1 (like 2/2 or 3/3), which doesn't change the value. Recognizing equivalent fractions is the foundation for comparing, adding, and simplifying fractions.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "equivalent_fractions",
+      "content_type": "concept_explanation",
+      "difficulty": 1,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_equivalent_fractions_worked_example_001",
+    "text": "Find a fraction equivalent to 3/4 with a denominator of 20. Step 1: Ask what number times 4 equals 20 — the answer is 5. Step 2: Multiply both the numerator and denominator by 5: (3×5)/(4×5) = 15/20. Step 3: Verify by simplifying 15/20 — divide both by 5 to get 3/4. Since you get back to the original fraction, 15/20 is indeed equivalent to 3/4. This process is called 'building up' a fraction and is used whenever you need a common denominator.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "equivalent_fractions",
+      "content_type": "worked_example",
+      "difficulty": 1,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_equivalent_fractions_worked_example_002",
+    "text": "Simplify 36/48 to lowest terms. Step 1: Find the greatest common factor (GCF) of 36 and 48. Factors of 36: 1, 2, 3, 4, 6, 9, 12, 18, 36. Factors of 48: 1, 2, 3, 4, 6, 8, 12, 16, 24, 48. The GCF is 12. Step 2: Divide both numerator and denominator by 12: (36÷12)/(48÷12) = 3/4. Step 3: Check that 3 and 4 share no common factors other than 1 — they don't, so 3/4 is fully simplified. Simplifying a fraction does not change its value; it just makes it easier to work with.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "equivalent_fractions",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_equivalent_fractions_common_misconception_001",
+    "text": "A common error is adding the same number to both the numerator and denominator and thinking the result is equivalent. For example, a student might reason that 1/2 and 2/3 are equivalent because they each added 1 to the top and bottom of 1/2. But 1/2 = 0.5 and 2/3 ≈ 0.667 — they are not equal. Equivalent fractions are only created by multiplying or dividing both parts by the same number, not by adding or subtracting. Always multiply (or divide) — never add or subtract — when generating equivalent fractions.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "equivalent_fractions",
+      "content_type": "common_misconception",
+      "difficulty": 2,
+      "misconception_tag": "wrong_operation"
+    }
+  },
+  {
+    "id": "fractions_equivalent_fractions_worked_example_003",
+    "text": "Determine whether 5/8 and 15/24 are equivalent. Method 1 — simplify both: 15/24 ÷ 3/3 = 5/8. Since they simplify to the same fraction, they are equivalent. Method 2 — cross-multiply: 5 × 24 = 120 and 8 × 15 = 120. Because the cross-products are equal, the fractions are equivalent. Either method works; cross-multiplying is especially handy when the fractions have large or unfamiliar numbers and finding factors would take a long time.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "equivalent_fractions",
+      "content_type": "worked_example",
+      "difficulty": 3,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_addition_subtraction_concept_001",
+    "text": "To add or subtract fractions, the denominators must be the same — this is called having a common denominator. When the denominators are already equal, you simply add or subtract the numerators and keep the denominator the same: 3/7 + 2/7 = 5/7. When the denominators differ, you must first convert both fractions to equivalent fractions that share a common denominator (usually the least common denominator, or LCD), and then add or subtract the numerators. Always simplify your answer to lowest terms if possible, and convert improper fractions to mixed numbers if the problem calls for it.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "addition_subtraction",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_addition_subtraction_worked_example_001",
+    "text": "Add 1/4 + 2/3. Step 1: Find the LCD of 4 and 3. Multiples of 4: 4, 8, 12. Multiples of 3: 3, 6, 9, 12. The LCD is 12. Step 2: Convert each fraction: 1/4 = 3/12 and 2/3 = 8/12. Step 3: Add the numerators, keeping the denominator: 3/12 + 8/12 = 11/12. Step 4: Check if 11/12 can be simplified — 11 is prime and doesn't divide 12, so the answer is 11/12 in lowest terms.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "addition_subtraction",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_addition_subtraction_worked_example_002",
+    "text": "Subtract 3 1/4 - 1 5/6. Step 1: Convert to improper fractions: 3 1/4 = 13/4 and 1 5/6 = 11/6. Step 2: Find the LCD of 4 and 6, which is 12. Step 3: Convert: 13/4 = 39/12 and 11/6 = 22/12. Step 4: Subtract the numerators: 39/12 - 22/12 = 17/12. Step 5: Convert back to a mixed number: 17 ÷ 12 = 1 remainder 5, so the answer is 1 5/12. Always double-check by converting back to decimals: 3.25 - 1.833... ≈ 1.417, and 17/12 ≈ 1.417.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "addition_subtraction",
+      "content_type": "worked_example",
+      "difficulty": 3,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_addition_subtraction_common_misconception_001",
+    "text": "One of the most common fraction mistakes is adding both numerators and both denominators separately — for instance, writing 1/2 + 1/3 = 2/5. This is wrong because the denominators tell you the size of each piece, and you cannot simply combine them. The correct process is to find a common denominator first: 1/2 = 3/6 and 1/3 = 2/6, so 1/2 + 1/3 = 5/6. Notice that 5/6 ≈ 0.833, while 2/5 = 0.4 — the incorrect answer is less than either original fraction, which is a clue that something went wrong.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "addition_subtraction",
+      "content_type": "common_misconception",
+      "difficulty": 2,
+      "misconception_tag": "wrong_operation"
+    }
+  },
+  {
+    "id": "fractions_addition_subtraction_worked_example_003",
+    "text": "Simplify: 5/6 - 1/4 + 2/3. Step 1: Find the LCD of 6, 4, and 3. The LCD is 12. Step 2: Convert all fractions: 5/6 = 10/12, 1/4 = 3/12, 2/3 = 8/12. Step 3: Work left to right: 10/12 - 3/12 = 7/12, then 7/12 + 8/12 = 15/12. Step 4: Simplify 15/12 by dividing by the GCF of 3: 15/12 = 5/4. Step 5: Write as a mixed number: 5/4 = 1 1/4.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "addition_subtraction",
+      "content_type": "worked_example",
+      "difficulty": 4,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_multiplication_division_concept_001",
+    "text": "Multiplying fractions is straightforward: multiply the numerators together and multiply the denominators together — no common denominator is needed. For example, 2/3 × 4/5 = 8/15. You can often simplify before multiplying by 'cross-canceling': if any numerator and any denominator share a common factor, divide both by that factor first to keep the numbers smaller. Dividing fractions uses the 'keep-change-flip' method: keep the first fraction, change division to multiplication, and flip (take the reciprocal of) the second fraction. So 2/3 ÷ 4/5 = 2/3 × 5/4 = 10/12 = 5/6.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "multiplication_division",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_multiplication_division_worked_example_001",
+    "text": "Multiply 3/8 × 4/9. Step 1: Look for cross-canceling opportunities — the 3 in the numerator and the 9 in the denominator share a factor of 3; the 4 in the numerator and the 8 in the denominator share a factor of 4. Step 2: Simplify: 3/3=1, 9/3=3, 4/4=1, 8/4=2. The problem becomes 1/2 × 1/3. Step 3: Multiply: 1×1 = 1 and 2×3 = 6, giving 1/6. Verify without cross-canceling: 3×4 = 12 and 8×9 = 72, so 12/72 = 1/6. Same answer — cross-canceling just saves simplifying at the end.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "multiplication_division",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_multiplication_division_worked_example_002",
+    "text": "Divide 2 1/2 ÷ 3/4. Step 1: Convert the mixed number to an improper fraction: 2 1/2 = 5/2. Step 2: Apply keep-change-flip: 5/2 ÷ 3/4 becomes 5/2 × 4/3. Step 3: Cross-cancel: 4 and 2 share a factor of 2, giving 5/1 × 2/3. Step 4: Multiply: 10/3. Step 5: Convert to a mixed number: 10 ÷ 3 = 3 remainder 1, so the answer is 3 1/3. This makes sense because dividing 2.5 by 0.75 should give a number greater than 2.5, and 3 1/3 ≈ 3.33 is indeed greater.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "multiplication_division",
+      "content_type": "worked_example",
+      "difficulty": 3,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_multiplication_division_common_misconception_001",
+    "text": "Students sometimes forget to flip the second fraction when dividing and just multiply straight across, or they flip the first fraction instead of the second. For example, for 3/5 ÷ 2/7, a wrong answer would be 3/5 × 2/7 = 6/35 (forgetting to flip) or 5/3 × 2/7 = 10/21 (flipping the wrong fraction). The correct method is to keep the first fraction (3/5), change the operation to multiplication, and flip only the second fraction (7/2): 3/5 × 7/2 = 21/10 = 2 1/10. Always check — dividing by a fraction less than 1 should give a result larger than the original number.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "multiplication_division",
+      "content_type": "common_misconception",
+      "difficulty": 3,
+      "misconception_tag": "wrong_operation"
+    }
+  },
+  {
+    "id": "fractions_multiplication_division_worked_example_003",
+    "text": "Evaluate: (3/4 × 8/9) ÷ (1/2 + 1/3). Step 1: Compute the multiplication in the numerator: 3/4 × 8/9. Cross-cancel 3 and 9 (÷3) and 8 and 4 (÷4): becomes 1/1 × 2/3 = 2/3. Step 2: Compute the addition in the denominator: 1/2 + 1/3 = 3/6 + 2/6 = 5/6. Step 3: Divide the two results: 2/3 ÷ 5/6 = 2/3 × 6/5. Cross-cancel 6 and 3: becomes 2/1 × 2/5 = 4/5. The final answer is 4/5.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "multiplication_division",
+      "content_type": "worked_example",
+      "difficulty": 5,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_equivalent_fractions_concept_002",
+    "text": "A fraction in lowest terms (also called simplest form) is one where the numerator and denominator share no common factors other than 1. To simplify a fraction, find the greatest common factor (GCF) of the numerator and denominator, then divide both by that GCF. For example, to simplify 18/24: the GCF of 18 and 24 is 6, so 18/24 ÷ 6/6 = 3/4. Simplifying fractions does not change the value — 18/24 and 3/4 are equivalent. Working with fractions in simplest form makes all other operations easier and is usually required for a final answer.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "equivalent_fractions",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_addition_subtraction_concept_002",
+    "text": "To find the least common denominator (LCD) of two fractions, you need the smallest number that is a multiple of both denominators. One reliable method is to list multiples of each denominator until you find one they share: for 3 and 5, the multiples of 5 are 5, 10, 15 — and 15 is the first multiple of 3 also, so the LCD is 15. Another method is to use the formula LCD(a,b) = (a × b) ÷ GCF(a,b). Using the LCD (rather than just any common denominator) keeps the numbers as small as possible, which reduces the chance of arithmetic errors.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "addition_subtraction",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_multiplication_division_concept_002",
+    "text": "When multiplying or dividing fractions that involve whole numbers, convert the whole number to a fraction by writing it over 1 before proceeding. For example, 4 × 2/3 becomes 4/1 × 2/3 = 8/3 = 2 2/3. Similarly, 6 ÷ 3/4 becomes 6/1 ÷ 3/4 = 6/1 × 4/3 = 24/3 = 8. It helps to think of division by a fraction as asking 'how many groups of that fraction fit into the whole number?' — 8 groups of 3/4 fit into 6, which makes sense because 8 × 0.75 = 6.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "multiplication_division",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_equivalent_fractions_common_misconception_002",
+    "text": "Students sometimes try to simplify a fraction by dividing only the numerator or only the denominator, not both. For example, to simplify 6/10, a student might divide just the numerator by 2 and write 3/10, which changes the value from 0.6 to 0.3. The correct process is to divide both the numerator and denominator by 2: 6/10 = 3/5 = 0.6. Both parts must be divided by the same factor so that the fraction's value is preserved — the same rule that applies when building up equivalent fractions.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "equivalent_fractions",
+      "content_type": "common_misconception",
+      "difficulty": 1,
+      "misconception_tag": "arithmetic_mistake"
+    }
+  },
+  {
+    "id": "fractions_addition_subtraction_common_misconception_002",
+    "text": "When subtracting mixed numbers, students sometimes subtract a larger fractional part from a smaller one without borrowing, leading to an incorrect answer. For example, in 4 1/4 - 2 3/4, the fractional parts are 1/4 - 3/4, and since 1/4 < 3/4, you need to borrow: rename 4 1/4 as 3 5/4. Then subtract: 3 5/4 - 2 3/4 = 1 2/4 = 1 1/2. A student who ignores borrowing might write 2 2/4 by subtracting whole numbers and fractions independently — getting the whole-number part wrong too because they forgot the borrow.",
+    "metadata": {
+      "topic": "fractions",
+      "subtopic": "addition_subtraction",
+      "content_type": "common_misconception",
+      "difficulty": 3,
+      "misconception_tag": "arithmetic_mistake"
+    }
+  }
+]

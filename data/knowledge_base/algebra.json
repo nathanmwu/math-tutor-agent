@@ -1,0 +1,222 @@
+[
+  {
+    "id": "algebra_linear_equations_concept_001",
+    "text": "A linear equation is a mathematical statement that two expressions are equal, where the variable appears to the first power only. The goal when solving a linear equation is to isolate the variable on one side of the equals sign. You do this by performing the same operation on both sides of the equation, keeping it balanced — like a scale. Common operations include adding, subtracting, multiplying, or dividing both sides by the same number. For example, in 2x + 3 = 11, you subtract 3 from both sides to get 2x = 8, then divide both sides by 2 to find x = 4.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "linear_equations",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_linear_equations_worked_example_001",
+    "text": "Solve for x: x + 7 = 15. Step 1: Identify what operation is being done to x — here, 7 is being added. Step 2: Do the opposite (inverse) operation on both sides: subtract 7 from both sides. Step 3: x + 7 - 7 = 15 - 7, which simplifies to x = 8. Step 4: Check your answer by substituting back: 8 + 7 = 15. Since that's true, x = 8 is correct.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "linear_equations",
+      "content_type": "worked_example",
+      "difficulty": 1,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_linear_equations_worked_example_002",
+    "text": "Solve for x: 3(2x - 4) = 18. Step 1: Distribute the 3 into the parentheses: 6x - 12 = 18. Step 2: Add 12 to both sides to undo the subtraction: 6x = 30. Step 3: Divide both sides by 6 to isolate x: x = 5. Step 4: Verify by substituting x = 5 back into the original equation: 3(2·5 - 4) = 3(10 - 4) = 3(6) = 18. The answer checks out.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "linear_equations",
+      "content_type": "worked_example",
+      "difficulty": 3,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_linear_equations_common_misconception_001",
+    "text": "A very common mistake is forgetting to apply an operation to both sides of the equation. For example, in x - 5 = 10, a student might just add 5 to the right side and write x = 15, which happens to be correct by accident — but in 2x - 5 = 10, adding 5 only to the left gives 2x = 10, leading to x = 5 instead of the correct x = 7.5. Always remember: whatever you do to one side of the equals sign, you must do to the other side too, or the equation becomes unbalanced and the solution will be wrong.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "linear_equations",
+      "content_type": "common_misconception",
+      "difficulty": 2,
+      "misconception_tag": "wrong_operation"
+    }
+  },
+  {
+    "id": "algebra_linear_equations_worked_example_003",
+    "text": "Solve for x: (x/3) + 2 = (x/2) - 1. Step 1: Eliminate fractions by multiplying every term by the least common multiple of 3 and 2, which is 6: 2x + 12 = 3x - 6. Step 2: Subtract 2x from both sides: 12 = x - 6. Step 3: Add 6 to both sides: x = 18. Step 4: Check — left side: (18/3) + 2 = 6 + 2 = 8; right side: (18/2) - 1 = 9 - 1 = 8. Both sides equal 8, confirming x = 18.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "linear_equations",
+      "content_type": "worked_example",
+      "difficulty": 5,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_inequalities_concept_001",
+    "text": "An inequality is like an equation, but instead of an equals sign it uses symbols like < (less than), > (greater than), ≤ (less than or equal to), or ≥ (greater than or equal to). Solving an inequality means finding all values of the variable that make the statement true — this is often a whole range of numbers, not just one answer. You solve inequalities almost exactly like equations, with one critical exception: if you multiply or divide both sides by a negative number, you must flip the direction of the inequality sign. For example, -2x < 8 becomes x > -4 after dividing by -2.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "inequalities",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_inequalities_worked_example_001",
+    "text": "Solve and graph on a number line: x + 4 > 9. Step 1: Subtract 4 from both sides: x > 5. Step 2: This means any number greater than 5 is a solution — for example, 6, 7, 100, or 5.001 all work. Step 3: On a number line, draw an open circle at 5 (because 5 itself is not included) and shade all numbers to the right. You can check by plugging in a value like 6: 6 + 4 = 10 > 9, which is true.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "inequalities",
+      "content_type": "worked_example",
+      "difficulty": 1,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_inequalities_worked_example_002",
+    "text": "Solve: -3x + 6 ≤ 15. Step 1: Subtract 6 from both sides: -3x ≤ 9. Step 2: Divide both sides by -3 — and because you are dividing by a negative number, flip the inequality sign: x ≥ -3. Step 3: The solution is all numbers greater than or equal to -3. On a number line, use a closed circle at -3 and shade to the right. Check with x = 0: -3(0) + 6 = 6 ≤ 15, which is true.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "inequalities",
+      "content_type": "worked_example",
+      "difficulty": 3,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_inequalities_common_misconception_001",
+    "text": "The most frequent error with inequalities is forgetting to flip the inequality sign when multiplying or dividing by a negative number. For instance, when solving -4x > 20, many students just divide both sides by -4 and write x > -5 — but that is wrong. Because you divided by a negative number, the sign must flip: the correct answer is x < -5. You can verify this by testing x = -6: -4(-6) = 24 > 20, which is true; but x = 0 gives -4(0) = 0, which is not greater than 20, confirming that positive numbers should not be in the solution set.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "inequalities",
+      "content_type": "common_misconception",
+      "difficulty": 3,
+      "misconception_tag": "sign_error"
+    }
+  },
+  {
+    "id": "algebra_inequalities_worked_example_003",
+    "text": "Solve the compound inequality: -2 < 3x + 1 ≤ 10. Step 1: Subtract 1 from all three parts: -3 < 3x ≤ 9. Step 2: Divide all three parts by 3: -1 < x ≤ 3. Step 3: The solution is all numbers strictly greater than -1 and less than or equal to 3. On a number line, place an open circle at -1 and a closed circle at 3, shading the region between them. A value like x = 2 checks: -2 < 3(2)+1 = 7 ≤ 10.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "inequalities",
+      "content_type": "worked_example",
+      "difficulty": 4,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_substitution_concept_001",
+    "text": "Substitution means replacing a variable with a known value (or another expression) to simplify or evaluate an expression. When you know the value of a variable, you substitute it in and then use the order of operations to calculate the result. Substitution is also a method for solving systems of equations: you isolate one variable in one equation, then substitute that expression into the other equation, turning a two-variable problem into a one-variable problem. This technique is a building block for algebra, functions, and beyond.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "substitution",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_substitution_worked_example_001",
+    "text": "Evaluate 4x² - 3x + 5 when x = 2. Step 1: Replace every x with 2: 4(2)² - 3(2) + 5. Step 2: Compute the exponent first: 4(4) - 3(2) + 5. Step 3: Multiply: 16 - 6 + 5. Step 4: Add and subtract left to right: 16 - 6 = 10, then 10 + 5 = 15. The value of the expression when x = 2 is 15. Always follow the order of operations (PEMDAS) carefully after substituting.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "substitution",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_substitution_worked_example_002",
+    "text": "Solve the system using substitution: y = 2x + 1 and 3x + y = 16. Step 1: The first equation already isolates y, so substitute 2x + 1 for y in the second equation: 3x + (2x + 1) = 16. Step 2: Combine like terms: 5x + 1 = 16. Step 3: Subtract 1 from both sides: 5x = 15, so x = 3. Step 4: Substitute x = 3 back into y = 2x + 1: y = 2(3) + 1 = 7. The solution is x = 3, y = 7. Check: 3(3) + 7 = 9 + 7 = 16.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "substitution",
+      "content_type": "worked_example",
+      "difficulty": 3,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_substitution_common_misconception_001",
+    "text": "A common error when substituting a negative value is forgetting to use parentheses, which leads to sign mistakes. For example, if x = -3 and the expression is x² - 2x, a student might write -3² - 2·-3 and mistakenly treat -3² as -9 (squaring first, then negating) instead of correctly evaluating (-3)² = 9. The correct substitution with parentheses gives (-3)² - 2(-3) = 9 + 6 = 15. Always wrap substituted values — especially negatives — in parentheses to avoid this type of sign error.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "substitution",
+      "content_type": "common_misconception",
+      "difficulty": 3,
+      "misconception_tag": "sign_error"
+    }
+  },
+  {
+    "id": "algebra_substitution_worked_example_003",
+    "text": "Solve the system: 2x + 3y = 12 and x - y = 1. Step 1: Isolate x in the second equation: x = y + 1. Step 2: Substitute into the first equation: 2(y + 1) + 3y = 12. Step 3: Distribute: 2y + 2 + 3y = 12, so 5y + 2 = 12. Step 4: Subtract 2, then divide by 5: y = 2. Step 5: Substitute back to find x: x = 2 + 1 = 3. The solution is x = 3, y = 2. Check in both equations: 2(3)+3(2)=12 ✓ and 3-2=1 ✓.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "substitution",
+      "content_type": "worked_example",
+      "difficulty": 4,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_linear_equations_worked_example_004",
+    "text": "Solve for x: 5x - 3 = 2x + 9. Step 1: Get all x terms on one side by subtracting 2x from both sides: 3x - 3 = 9. Step 2: Add 3 to both sides to isolate the x term: 3x = 12. Step 3: Divide both sides by 3: x = 4. Step 4: Check: 5(4) - 3 = 17 and 2(4) + 9 = 17. Both sides equal 17, confirming the answer.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "linear_equations",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_inequalities_concept_002",
+    "text": "When graphing the solution to an inequality on a number line, the type of circle you draw at the boundary point matters. Use an open circle (○) when the boundary value is not included in the solution — this happens with strict inequalities using < or >. Use a closed circle (●) when the boundary value is included — this happens with ≤ or ≥. Then shade the number line in the direction of valid solutions: shade left for less than and right for greater than. For example, x ≤ 4 gets a closed circle at 4 with shading to the left.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "inequalities",
+      "content_type": "concept_explanation",
+      "difficulty": 1,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_substitution_worked_example_004",
+    "text": "If f(x) = 3x - 7, find f(0), f(4), and f(-2). For f(0): substitute x = 0 to get 3(0) - 7 = -7. For f(4): substitute x = 4 to get 3(4) - 7 = 12 - 7 = 5. For f(-2): substitute x = -2 to get 3(-2) - 7 = -6 - 7 = -13. Notice that function notation like f(4) is just a shorthand way of saying 'evaluate the expression when x = 4.' The parentheses in f(4) do not mean multiplication.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "substitution",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "algebra_linear_equations_common_misconception_002",
+    "text": "Students often make arithmetic mistakes when moving terms across the equals sign, incorrectly thinking of it as 'moving' a number rather than performing an inverse operation. For example, in x + 8 = 20, a student might think '8 moves to the other side and becomes -8' and get x = 12, which is actually correct — but they might misapply this rule to multiplication and write '3x = 12, so x = 12 - 3 = 9' instead of dividing to get x = 4. There is no magic 'moving' — you are always performing the same inverse operation on both sides.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "linear_equations",
+      "content_type": "common_misconception",
+      "difficulty": 2,
+      "misconception_tag": "wrong_operation"
+    }
+  },
+  {
+    "id": "algebra_substitution_concept_002",
+    "text": "Substitution is also how you check a solution to any equation or inequality. After you solve for a variable, plug your answer back into the original equation and see if both sides are equal. If they are, your solution is correct; if they aren't, you made a mistake somewhere in your work. This checking step takes only a moment and can save you from losing points on a test. For example, if you solved 2x + 5 = 13 and got x = 4, substitute to check: 2(4) + 5 = 8 + 5 = 13. The equation holds, so x = 4 is correct.",
+    "metadata": {
+      "topic": "algebra",
+      "subtopic": "substitution",
+      "content_type": "concept_explanation",
+      "difficulty": 1,
+      "misconception_tag": null
+    }
+  }
+]
