@@ -26,5 +26,8 @@ Thumbs.db
 .idea/
 *.swp
 
+# Claude Code local overrides (personal settings, never commit)
+.claude/settings.local.json
+
 # Streamlit
 .streamlit/
