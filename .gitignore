@@ -8,6 +8,9 @@ build/
 venv/
 env/
 
+# Python version pin (for reference, not enforced)
+# Project requires Python 3.12 — onnxruntime (chromadb dep) has no wheel for 3.13+
+
 # Environment
 .env
 
