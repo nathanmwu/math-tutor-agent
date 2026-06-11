@@ -9,13 +9,15 @@ Recent problems (avoid repeating): {recent_problems}
 
 Return ONLY valid JSON with no markdown, no explanation, no code fences. The JSON must have exactly these fields:
 - "problem_text": the problem as a plain string the student will read
-- "sympy_answer": the correct answer as a string parseable by sympy.sympify() — use formats like "5", "Rational(3,4)", "2.5", "Rational(7,2)" — no units, no words, no LaTeX
+- "sympy_expression": a valid Python expression using SymPy that COMPUTES the answer — do NOT simplify it yourself, write the raw computation so SymPy can evaluate it. Use Rational(a,b) for fractions. Examples: "Rational(1,6) + Rational(2,3)", "Rational(3,4) * Rational(2,5)", "7 - Rational(3,8)", "2*3 + 4"
 - "topic": the topic string exactly as given
 - "subtopic": the subtopic string exactly as given
 - "difficulty": the difficulty integer exactly as given
 
+IMPORTANT: Never pre-compute the answer. Always write the expression as the raw computation so the system can verify it independently.
+
 Example output:
-{{"problem_text": "What is 3/4 + 1/2?", "sympy_answer": "Rational(5,4)", "topic": "fractions", "subtopic": "addition_subtraction", "difficulty": 2}}"""
+{{"problem_text": "What is 1/6 + 2/3?", "sympy_expression": "Rational(1,6) + Rational(2,3)", "topic": "fractions", "subtopic": "addition_subtraction", "difficulty": 2}}"""
 
 CATEGORIZE_ERROR_PROMPT = """A student answered a math problem incorrectly. Categorize the error type.
 

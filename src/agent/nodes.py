@@ -142,11 +142,14 @@ def generate_problem_node(state: TutorState) -> dict:
         try:
             data = json.loads(raw)
             pt = data.get("problem_text", "").strip()
-            sa = data.get("sympy_answer", "").strip()
-            if pt and sa:
-                sympify(sa, rational=True)
+            expr_str = data.get("sympy_expression", "").strip()
+            if pt and expr_str:
+                # Evaluate the expression ourselves — never trust the LLM's arithmetic
+                computed = sympify(expr_str, locals={"Rational": __import__("sympy").Rational}, rational=True)
+                if computed.free_symbols:
+                    continue  # expression contains unknowns, retry
                 problem_text = pt
-                sympy_answer = sa
+                sympy_answer = str(computed)
                 break
         except Exception:
             continue
