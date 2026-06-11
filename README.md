@@ -1,0 +1,306 @@
+# Math Tutor Agent
+
+An adaptive K-12 math tutoring system that generates problems, evaluates answers with a symbolic math solver, and retrieves targeted explanations from a curated knowledge base. Difficulty and topic selection adjust automatically based on each student's performance history.
+
+Built as a portfolio project demonstrating core AI engineering techniques: retrieval-augmented generation (RAG), stateful agentic loops with LangGraph, deterministic answer evaluation with SymPy, and persistent student modeling.
+
+---
+
+## What It Does
+
+1. **Generates a problem** appropriate for the student's current level on their weakest topic
+2. **Student submits an answer** — any equivalent form is accepted (`1/2`, `0.5`, `2/4` are all correct for the same answer)
+3. **Evaluates the answer symbolically** — right/wrong is determined by math, not an AI guess
+4. **Retrieves an explanation** from a knowledge base of concept notes and worked examples
+5. **Gives targeted feedback** — if wrong, explains the correct answer and what likely went wrong
+6. **Updates the student's mastery profile** and adjusts difficulty for the next problem
+7. **Loops** — presents the next problem, now at an adjusted difficulty on the most appropriate topic
+
+All computation runs locally. No API keys required.
+
+---
+
+## Quick Start
+
+**Prerequisites**: Python 3.12, [Ollama](https://ollama.com) installed and running
+
+```bash
+# Pull the language model
+ollama pull llama3.1:8b
+
+# Clone and set up
+git clone https://github.com/nathanmwu/math-tutor-agent.git
+cd math-tutor-agent
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Copy environment config
+cp .env.example .env
+
+# Populate the knowledge base (run once)
+python scripts/ingest_kb.py
+
+# Launch
+streamlit run src/ui/app.py
+```
+
+Open http://localhost:8501, enter your name, and start practicing.
+
+---
+
+## Project Structure
+
+```
+math-tutor-agent/
+├── src/
+│   ├── agent/
+│   │   ├── graph.py        # LangGraph StateGraph — defines the tutoring loop
+│   │   ├── nodes.py        # All node functions + symbolic_check()
+│   │   ├── prompts.py      # All LLM prompt templates
+│   │   └── state.py        # TutorState TypedDict
+│   ├── knowledge/
+│   │   ├── loader.py       # Ingests knowledge base JSON → ChromaDB
+│   │   └── retriever.py    # ChromaDB query with topic/difficulty filters
+│   ├── state/
+│   │   ├── models.py       # Pydantic models: StudentState, TopicMastery, AttemptRecord
+│   │   └── store.py        # load_student(), save_student(), record_attempt()
+│   └── ui/
+│       └── app.py          # Streamlit UI
+├── data/
+│   ├── knowledge_base/     # Source JSON chunks (version-controlled)
+│   │   ├── fractions.json
+│   │   ├── algebra.json
+│   │   └── ...
+│   ├── chromadb/           # ChromaDB vector store (generated, gitignored)
+│   └── students/           # Per-student state files (generated, gitignored)
+├── tests/
+│   ├── test_symbolic_check.py      # Unit tests for answer evaluation logic
+│   ├── test_answer_evaluation.py   # Integration tests for evaluation pipeline
+│   ├── test_problem_generation.py  # LLM output validation tests
+│   └── test_pipeline.py            # End-to-end graph tests
+└── scripts/
+    └── ingest_kb.py        # One-time knowledge base ingestion script
+```
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│  Streamlit UI  (src/ui/app.py)                  │
+│  Problem display · Answer input · Mastery bars  │
+└──────────────────────┬──────────────────────────┘
+                       │ graph.stream(TutorState)
+┌──────────────────────▼──────────────────────────┐
+│  LangGraph StateGraph  (src/agent/graph.py)     │
+│                                                 │
+│  load_state → select_topic → generate_problem  │
+│                                    ↓            │
+│                              [UI PAUSE]         │
+│                                    ↓            │
+│                           evaluate_answer       │
+│                                    ↓            │
+│                         retrieve_explanation    │
+│                                    ↓            │
+│                          generate_feedback      │
+│                                    ↓            │
+│                    update_state → adapt_next ──▶│ (loop)
+└─────────────────┬───────────────────────────────┘
+                  │
+     ┌────────────┴────────────┐
+     ▼                         ▼
+┌─────────────┐       ┌────────────────────┐
+│  ChromaDB   │       │  Student State     │
+│  (RAG)      │       │  JSON + Pydantic   │
+└──────┬──────┘       └────────────────────┘
+       │
+┌──────▼──────┐
+│   Ollama    │
+│ llama3.1:8b │
+└─────────────┘
+```
+
+### How a single turn flows
+
+1. `load_state_node` reads the student's JSON file, loading mastery scores into the graph state
+2. `select_topic_node` picks the topic with the lowest mastery (70% of the time) or an unexplored topic (30%)
+3. `generate_problem_node` calls Ollama with a structured prompt, asking for both problem text and a SymPy expression representing the computation. The node evaluates the expression itself — the LLM's arithmetic is never trusted
+4. **Graph pauses** — the UI renders the problem and waits for the student
+5. `evaluate_answer_node` runs `symbolic_check()`: parses the student's input with SymPy and checks `simplify(student - correct) == 0`. If wrong, calls Ollama to categorize the error type
+6. `retrieve_explanation_node` queries ChromaDB with topic, subtopic, difficulty, and (if available) error category filters, returning the 3 most relevant knowledge chunks
+7. `generate_feedback_node` calls Ollama with the retrieved chunks injected — the LLM explains the correct answer using verified educational content, not its parametric memory
+8. `update_state_node` updates the mastery score with an EMA, adjusts difficulty, and saves to disk
+9. `adapt_next_node` sets up the next problem's topic and difficulty, and the loop continues
+
+---
+
+## Technology Deep Dive
+
+### LangGraph — stateful agentic loop
+
+LangGraph is used to define the tutoring session as an explicit state machine rather than an open-ended agent. Each step is a typed node that reads from and writes to `TutorState` (a `TypedDict`). The graph is compiled with:
+
+- **`MemorySaver` checkpointer**: snapshots the full state after each node, keyed by `thread_id` (the student's name). Sessions resume from exactly where they left off.
+- **`interrupt_before=["evaluate_answer_node"]`**: the graph pauses execution before evaluation and hands control back to the UI. When the student submits, the UI injects the answer via `graph.update_state()` and calls `graph.stream(None)` to resume.
+
+This is the pattern that enables human-in-the-loop interaction without polling or threading.
+
+```python
+# Pause: graph runs load → select → generate, then stops
+graph.stream(initial_state, config={"configurable": {"thread_id": "alice"}})
+
+# Resume: inject answer, continue from evaluate onward
+graph.update_state(config, {"student_answer": "3/4"})
+graph.stream(None, config=config)
+```
+
+Why LangGraph over LangChain's `AgentExecutor`: the tutoring session has a fixed, well-defined sequence of steps. An explicit graph is more predictable, easier to debug, and clearer to reason about than an open-ended ReAct loop that decides at runtime what to do next.
+
+### ChromaDB — retrieval-augmented generation (RAG)
+
+ChromaDB stores a curated knowledge base of math explanations, worked examples, and common misconception notes. Each chunk is tagged with `topic`, `subtopic`, `difficulty`, and `misconception_tag` metadata.
+
+When a student answers a problem, `retrieve_explanation_node` queries ChromaDB with metadata filters before performing semantic search. This ensures that retrieved chunks are:
+- On the right topic and subtopic
+- At an appropriate difficulty level
+- Matched to the student's specific error type when possible (e.g., a `sign_error` retrieves chunks tagged `misconception_tag: sign_error`)
+
+The retrieved text is then injected directly into the feedback generation prompt. This is the RAG pattern: the LLM generates explanations grounded in verified content, not just trained intuition.
+
+```
+Query: topic=algebra, subtopic=linear_equations, difficulty≤3, misconception_tag=sign_error
+→ Returns: 3 chunks explaining sign errors in equation solving
+→ Injected into: feedback prompt
+```
+
+Embeddings are generated locally using `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions, CPU-compatible). ChromaDB persists to `data/chromadb/` as a local file store — no server or Docker required.
+
+### SymPy — deterministic answer evaluation
+
+Every problem has a `sympy_answer` field stored in the graph state that is never shown to the student. When the student submits, `symbolic_check()` compares their input to the stored answer mathematically:
+
+```python
+simplify(sympify(student_input) - sympify(sympy_answer)) == 0
+```
+
+This accepts any mathematically equivalent form:
+- `1/2`, `0.5`, `2/4`, `4/8` — all correct for the same answer
+- `5/6`, `10/12` — equivalent fractions accepted
+- `8` — correct answer to `solve(3x - 9 = 15)`
+
+The correct answer is **computed by SymPy from a raw expression**, not taken from the LLM. The LLM provides a `sympy_expression` (e.g., `"solve(3*x - 9 - 15, x)"` or `"Rational(1,6) + Rational(2,3)"`), and the node evaluates it independently. This eliminates the most common failure mode: an LLM getting the arithmetic wrong on its own output.
+
+Using SymPy instead of an LLM for answer evaluation is a deliberate architectural choice. LLM-based math checking has two unacceptable failure modes in a tutoring context: marking correct answers wrong, and accepting subtly wrong answers.
+
+### Ollama + llama3.1:8b — local language model
+
+Ollama runs `llama3.1:8b` locally at `localhost:11434`. The LLM is used for three tasks where natural language generation is appropriate:
+
+| Task | Why LLM is appropriate |
+|---|---|
+| Problem generation | Requires natural language and variety |
+| Error categorization | Qualitative judgment about what kind of mistake was made |
+| Feedback generation | Requires natural, encouraging explanation tailored to the student's answer |
+
+Answer evaluation (right/wrong) is explicitly **not** delegated to the LLM — that is handled by SymPy.
+
+### Pydantic + JSON — persistent student state
+
+Each student's state is stored as a JSON file at `data/students/{student_id}.json`, validated by Pydantic v2 models:
+
+- `StudentState` — top-level container (student ID, creation time, mastery map, attempt history)
+- `TopicMastery` — per-topic model (mastery score, current difficulty, attempt counts, error pattern tallies)
+- `AttemptRecord` — immutable record of one problem attempt (timestamp, problem text, answer, result, error category)
+
+Pydantic handles serialization (`model_dump_json`) and deserialization (`model_validate_json`). JSON files are human-readable, easy to inspect during development, and require no database infrastructure.
+
+### Mastery algorithm — Exponential Moving Average
+
+The student's mastery on each topic is a single float from 0.0 to 1.0, updated after every attempt:
+
+```
+new_mastery = 0.8 × old_mastery + 0.2 × outcome
+```
+
+where `outcome = 1.0` for correct, `0.0` for wrong. This is an EMA with α = 0.2 — recent performance has more influence, but a single wrong answer on a well-mastered topic does not collapse the score.
+
+Difficulty adapts separately: +1 on a correct answer, −1 on wrong, clamped to [1, 5].
+
+The production path for mastery modeling would be Bayesian Knowledge Tracing (BKT), which maintains per-skill estimates of learning rate, guess probability, and slip probability. EMA is used here because it demonstrates the concept clearly without requiring training data for parameter estimation.
+
+---
+
+## Knowledge Base
+
+The knowledge base lives in `data/knowledge_base/` as version-controlled JSON files. Each chunk has:
+
+```json
+{
+  "id": "algebra_linear_eq_misconception_sign",
+  "text": "Common error: when moving a term across the equals sign...",
+  "metadata": {
+    "topic": "algebra",
+    "subtopic": "linear_equations",
+    "content_type": "common_misconception",
+    "difficulty": 2,
+    "misconception_tag": "sign_error"
+  }
+}
+```
+
+**Content types**:
+- `concept_explanation` — explains what a concept is and how to approach it
+- `worked_example` — walks through a sample problem step by step
+- `common_misconception` — describes a specific error pattern and why it's wrong
+
+**Topics covered** (Phase 1):
+- `fractions`: equivalent fractions, addition/subtraction, multiplication/division
+- `algebra`: linear equations, inequalities, substitution
+
+Run `python scripts/ingest_kb.py` to load all chunks into ChromaDB. The script is idempotent — re-running it skips chunks that are already indexed.
+
+---
+
+## Running Tests
+
+```bash
+# Fast unit tests — no LLM required
+.venv/bin/python -m pytest tests/test_symbolic_check.py tests/test_answer_evaluation.py -v
+
+# LLM integration tests — requires Ollama running (~3 min)
+.venv/bin/python -m pytest tests/test_problem_generation.py -v -s
+
+# Full end-to-end pipeline tests — requires Ollama running (~5 min)
+.venv/bin/python -m pytest tests/test_pipeline.py -v -s
+
+# All tests
+.venv/bin/python -m pytest tests/ -v
+```
+
+---
+
+## Configuration
+
+Copy `.env.example` to `.env` and adjust if needed:
+
+```
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1:8b
+CHROMADB_PATH=data/chromadb
+STUDENT_STATE_DIR=data/students
+KNOWLEDGE_BASE_DIR=data/knowledge_base
+```
+
+---
+
+## Design Decisions
+
+**Why not evaluate answers with an LLM?** LLM math evaluation is non-deterministic and fails in both directions: it can mark correct answers wrong and accept subtly wrong answers. SymPy compares symbolic expressions and eliminates both failure modes. In a tutoring context, a wrong grade is worse than no grade.
+
+**Why LangGraph instead of a simple loop?** LangGraph's checkpointer enables the pause/resume pattern that allows the UI to wait for human input without threading. It also provides typed state that makes each node's inputs and outputs explicit, which makes the system easier to test and extend.
+
+**Why ChromaDB instead of a simple list of strings?** Metadata filtering means retrieved chunks are relevant to the specific topic, difficulty, and error type — not just semantically similar. A sign error in algebra should retrieve content about sign errors, not general algebra explanations. This is the difference between useful feedback and generic feedback.
+
+**Why local models (Ollama) instead of an API?** The project is fully self-contained: no API keys, no cost per run, no data leaving the machine. `llama3.1:8b` is capable enough for problem generation and explanation. The model is parameterized in `.env` and can be swapped without code changes.
