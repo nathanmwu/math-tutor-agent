@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langchain_ollama import ChatOllama
+from src.agent.nodes import _parse_problem_json
 from src.agent.prompts import GENERATE_PROBLEM_PROMPT
 
 
@@ -50,11 +51,59 @@ def _call_llm(topic, subtopic, difficulty):
     return llm.invoke(prompt).content.strip()
 
 
-def _parse_response(raw):
-    """Strip code fences and parse JSON."""
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw)
-    return json.loads(raw)
+# Use the production parser so tests exercise the real repair logic
+_parse_response = _parse_problem_json
+
+
+# ── Unit tests: LaTeX-safe JSON parsing (no LLM required) ─────────────────────
+
+def test_parse_correctly_escaped_latex():
+    raw = '{"problem_text": "$\\\\frac{1}{6} + \\\\frac{2}{3} =$", "sympy_expression": "Rational(1,6) + Rational(2,3)"}'
+    data = _parse_problem_json(raw)
+    assert data["problem_text"] == "$\\frac{1}{6} + \\frac{2}{3} =$"
+
+
+def test_parse_single_escaped_frac():
+    # \f is a VALID json escape (formfeed) — silently corrupts without repair
+    raw = '{"problem_text": "$\\frac{1}{2} =$"}'
+    data = _parse_problem_json(raw)
+    assert data["problem_text"] == "$\\frac{1}{2} =$"
+
+
+def test_parse_single_escaped_times():
+    # \t is a VALID json escape (tab)
+    raw = '{"problem_text": "$3 \\times 4 =$"}'
+    data = _parse_problem_json(raw)
+    assert data["problem_text"] == "$3 \\times 4 =$"
+
+
+def test_parse_single_escaped_sqrt():
+    # \s is an INVALID json escape — json.loads would raise without repair
+    raw = '{"problem_text": "$\\sqrt{16} =$"}'
+    data = _parse_problem_json(raw)
+    assert data["problem_text"] == "$\\sqrt{16} =$"
+
+
+def test_parse_single_escaped_neq():
+    # \n is a VALID json escape (newline)
+    raw = '{"problem_text": "$a \\neq b$"}'
+    data = _parse_problem_json(raw)
+    assert data["problem_text"] == "$a \\neq b$"
+
+
+def test_parse_fenced_json():
+    raw = '```json\n{"problem_text": "$2 + 2 =$", "difficulty": 2}\n```'
+    data = _parse_problem_json(raw)
+    assert data["problem_text"] == "$2 + 2 =$"
+    assert data["difficulty"] == 2
+
+
+def test_parse_plain_json_unaffected():
+    raw = '{"problem_text": "$3x - 9 = 12$,  $x = ?$", "sympy_expression": "Eq(3*x - 9, 12)", "difficulty": 3}'
+    data = _parse_problem_json(raw)
+    assert data["problem_text"] == "$3x - 9 = 12$,  $x = ?$"
+    assert data["sympy_expression"] == "Eq(3*x - 9, 12)"
+    assert data["difficulty"] == 3
 
 
 def _evaluate_expression(expr_str):
@@ -121,3 +170,13 @@ def test_computed_answer_matches_problem(topic, subtopic, difficulty):
     print(f"\n  problem: {data['problem_text']}")
     print(f"  answer:  {result}")
     assert result.is_number, f"Expected a numeric answer, got: {result}"
+
+
+@pytest.mark.parametrize("topic,subtopic,difficulty", CASES)
+def test_problem_text_is_latex(topic, subtopic, difficulty):
+    """Problems must be pure mathematical notation wrapped in $...$ delimiters."""
+    raw = _call_llm(topic, subtopic, difficulty)
+    data = _parse_response(raw)
+    pt = data["problem_text"]
+    print(f"\n  problem_text: {pt}")
+    assert "$" in pt, f"problem_text has no LaTeX delimiters: {pt!r}"

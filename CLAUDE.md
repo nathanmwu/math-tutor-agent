@@ -20,24 +20,26 @@ The system is not trying to be production-scale. It is trying to be *correct*, *
 | **Adaptive behavior** | `src/agent/nodes.py:adapt_next` + `src/state/` | Student mastery tracked per topic via EMA; difficulty and topic selection adjust each turn |
 | **Persistent student state** | `src/state/models.py` + `data/students/` | Pydantic models serialized to per-student JSON; survives session restarts |
 | **Symbolic answer verification** | `src/agent/nodes.py:evaluate_answer` via SymPy | Deterministic math evaluation — right/wrong is never delegated to an LLM |
-| **Structured LLM output** | `src/agent/prompts.py` | Problem generation returns validated JSON (`problem_text`, `sympy_answer`, `topic`, `subtopic`) |
+| **Structured LLM output** | `src/agent/prompts.py` + `nodes.py:_parse_problem_json` | Problem generation returns validated JSON (`problem_text` in LaTeX, `sympy_expression`, `topic`, `subtopic`); a repair layer fixes LaTeX-in-JSON escaping corruption |
 
 ---
 
 ## Architecture at a Glance
 
 ```
-Streamlit UI
-    ↕ invoke / stream
+NiceGUI UI (single process, event-driven; KaTeX renders $...$ LaTeX)
+    ↕ graph.stream (in-process, consumed via run.io_bound)
 LangGraph StateGraph (TutorState)
     ├── load_state         → reads data/students/{id}.json
     ├── select_topic       → weakest topic or next curriculum slot
-    ├── generate_problem   → Ollama (llama3.1:8b) → structured JSON; SymPy evaluates expression
+    ├── generate_problem   → Ollama (llama3.1:8b) → pure-notation LaTeX problem JSON;
+    │                         _parse_problem_json repairs escaping; SymPy evaluates expression
     ├── [PAUSE]            → UI renders problem, student submits answer
     ├── evaluate_answer    → SymPy symbolic check (deterministic)
-    │                         + Ollama error categorization (wrong only)
+    │                         + Ollama error categorization (wrong only, internal)
     ├── retrieve_explanation → ChromaDB RAG (problem text as semantic query)
-    ├── generate_feedback  → Ollama with retrieved chunks; structured Result/Explanation/Error sections
+    ├── generate_feedback  → Ollama with retrieved chunks; Result + step-by-step
+    │                         LaTeX Explanation (error category never displayed)
     ├── update_state       → EMA mastery update + write JSON
     └── adapt_next         → sets next difficulty/topic → END
                               UI shows feedback; "Next problem" triggers a new turn from load_state
@@ -60,13 +62,17 @@ Full requirements and API contracts: see [project_spec.md](project_spec.md).
 
 **Pydantic + JSON over SQLite** — Human-readable, git-friendly, zero infrastructure. One file per student eliminates locking. SQLite is a trivial upgrade if cross-student querying becomes needed.
 
+**NiceGUI over Streamlit / React+shadcn** — Streamlit's rerun-per-interaction model was too slow; a React frontend would force a backend API split, Node toolchain, and two processes. NiceGUI is event-driven, single-process, pip-only, and calls the graph in-process. LaTeX is rendered by KaTeX (CDN auto-render + MutationObserver in `src/ui/app.py:KATEX_HEAD`).
+
+**Pure-notation problems over word problems** — Problems are written purely mathematically (`$\frac{1}{6} + \frac{2}{3} =$`, `$3x - 9 = 12$, $x = ?$`). Word problems let the story and the math drift apart (the source of past answer-mismatch bugs); pure notation keeps `problem_text` and `sympy_expression` two views of the same object.
+
 ---
 
 ## Local Setup
 
 ```bash
-# Prerequisites: Python 3.11+, Ollama running with llama3:8b pulled
-ollama pull llama3:8b
+# Prerequisites: Python 3.12, Ollama running with llama3.1:8b pulled
+ollama pull llama3.1:8b
 
 # Install dependencies
 pip install -r requirements.txt
@@ -74,8 +80,8 @@ pip install -r requirements.txt
 # Populate the knowledge base (run once)
 python scripts/ingest_kb.py
 
-# Start the app
-streamlit run src/ui/app.py
+# Start the app (single process — serves http://localhost:8501)
+python src/ui/app.py
 ```
 
 ---
@@ -112,7 +118,7 @@ Tutor-Agent/
     │   ├── nodes.py        # all node functions
     │   └── prompts.py      # all prompt templates
     └── ui/
-        └── app.py          # Streamlit app
+        └── app.py          # NiceGUI app (KaTeX rendering, live op feed)
 ```
 
 ---
@@ -124,3 +130,6 @@ Tutor-Agent/
 - All student state mutations go through `src/state/store.py` — never write JSON directly from a node.
 - SymPy evaluation lives in `src/agent/nodes.py:symbolic_check()` — keep it isolated so it's easy to swap or extend.
 - Knowledge base source files in `data/knowledge_base/` are the source of truth — re-run `ingest_kb.py` if ChromaDB is deleted.
+- The UI (`src/ui/app.py`) only touches `src/agent/graph.py` — never import nodes, store, or retriever from the UI.
+- All math shown to the student is LaTeX wrapped in `$...$` — problems are pure notation (no word problems); feedback is `Result:` + `Explanation:` only, the error category is never displayed.
+- The UI must stay responsive during LLM calls: consume `graph.stream` via `run.io_bound` chunk-by-chunk, never block the event loop.

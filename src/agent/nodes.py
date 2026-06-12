@@ -39,6 +39,32 @@ VALID_ERROR_CATEGORIES = {
 }
 
 
+def _parse_problem_json(raw: str) -> dict:
+    """Parse the problem-generation JSON, repairing LaTeX backslash escaping.
+
+    LLMs frequently emit single-backslash LaTeX inside JSON strings. Two failure modes:
+    - "\\cdot", "\\sqrt": invalid JSON escapes → json.loads raises
+    - "\\frac", "\\times", "\\neq", "\\binom": collide with valid JSON escapes
+      (\\f, \\t, \\n, \\b) and silently decode to control characters
+    """
+    raw = raw.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+
+    # Double any lone backslash not followed by a valid JSON escape char
+    repaired = re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", raw)
+    data = json.loads(repaired)
+
+    # Restore LaTeX commands that decoded to control characters
+    control_repairs = {"\f": "\\f", "\t": "\\t", "\b": "\\b", "\r": "\\r", "\n": "\\n"}
+    for key, value in data.items():
+        if isinstance(value, str):
+            for ctrl, fixed in control_repairs.items():
+                value = value.replace(ctrl, fixed)
+            data[key] = value
+    return data
+
+
 def symbolic_check(student_input: str, sympy_answer: str) -> bool | None:
     try:
         cleaned = student_input.strip()
@@ -139,11 +165,8 @@ def generate_problem_node(state: TutorState) -> dict:
         response = llm.invoke(prompt)
         raw = response.content.strip()
 
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-
         try:
-            data = json.loads(raw)
+            data = _parse_problem_json(raw)
             pt = data.get("problem_text", "").strip()
             expr_str = data.get("sympy_expression", "").strip()
             if pt and expr_str:
@@ -181,7 +204,7 @@ def generate_problem_node(state: TutorState) -> dict:
             continue
 
     if problem_text is None or sympy_answer is None:
-        problem_text = f"What is 2 + 2?"
+        problem_text = "$2 + 2 =$"
         sympy_answer = "4"
 
     return {
@@ -262,7 +285,6 @@ def generate_feedback_node(state: TutorState) -> dict:
         student_answer=state["student_answer"],
         correct_answer=state["sympy_answer"],
         is_correct=evaluation.get("is_correct", False),
-        error_category=evaluation.get("error_category"),
         retrieved_content=retrieved_content,
     )
     response = llm.invoke(prompt)

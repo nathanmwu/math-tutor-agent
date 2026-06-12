@@ -8,11 +8,11 @@ Built as a portfolio project demonstrating core AI engineering techniques: retri
 
 ## What It Does
 
-1. **Generates a problem** appropriate for the student's current level on their weakest topic
+1. **Generates a problem** appropriate for the student's current level on their weakest topic — written in pure mathematical notation and rendered with LaTeX (e.g. $\frac{1}{6} + \frac{2}{3} =$, no word problems)
 2. **Student submits an answer** — any equivalent form is accepted (`1/2`, `0.5`, `2/4` are all correct for the same answer)
 3. **Evaluates the answer symbolically** — right/wrong is determined by math, not an AI guess
 4. **Retrieves an explanation** from a knowledge base of concept notes and worked examples
-5. **Gives targeted feedback** — if wrong, explains the correct answer and what likely went wrong
+5. **Explains the solution** — a step-by-step LaTeX derivation grounded in the retrieved content, shown after every answer
 6. **Updates the student's mastery profile** and adjusts difficulty for the next problem
 7. **Loops** — presents the next problem, now at an adjusted difficulty on the most appropriate topic
 
@@ -42,7 +42,7 @@ cp .env.example .env
 python scripts/ingest_kb.py
 
 # Launch
-streamlit run src/ui/app.py
+python src/ui/app.py
 ```
 
 Open http://localhost:8501, enter your name, and start practicing.
@@ -66,7 +66,7 @@ math-tutor-agent/
 │   │   ├── models.py       # Pydantic models: StudentState, TopicMastery, AttemptRecord
 │   │   └── store.py        # load_student(), save_student(), record_attempt()
 │   └── ui/
-│       └── app.py          # Streamlit UI
+│       └── app.py          # NiceGUI app (problem display, answer input, mastery dashboard)
 ├── data/
 │   ├── knowledge_base/     # Source JSON chunks (version-controlled)
 │   │   ├── fractions.json
@@ -89,8 +89,9 @@ math-tutor-agent/
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  Streamlit UI  (src/ui/app.py)                  │
-│  Problem display · Answer input · Mastery bars  │
+│  NiceGUI UI  (src/ui/app.py)                    │
+│  LaTeX problems (KaTeX) · Answer input ·        │
+│  Mastery bars · Live operation feed             │
 └──────────────────────┬──────────────────────────┘
                        │ graph.stream(TutorState)
 ┌──────────────────────▼──────────────────────────┐
@@ -126,11 +127,11 @@ math-tutor-agent/
 
 1. `load_state_node` reads the student's JSON file, loading mastery scores into the graph state
 2. `select_topic_node` picks the topic with the lowest mastery (70% of the time) or an unexplored topic (30%)
-3. `generate_problem_node` calls Ollama with a structured prompt, asking for both problem text and a SymPy expression representing the computation. The node evaluates the expression itself — the LLM's arithmetic is never trusted
+3. `generate_problem_node` calls Ollama with a structured prompt, asking for a pure-notation, LaTeX-formatted problem (`$\frac{1}{6} + \frac{2}{3} =$` — no word problems) plus a SymPy expression representing the same computation. The node evaluates the expression itself — the LLM's arithmetic is never trusted. A repair layer fixes the LaTeX-in-JSON escaping mistakes LLMs commonly make (`\frac` silently decoding as a formfeed character, `\sqrt` breaking the parse)
 4. **Graph pauses** (`interrupt_before=["evaluate_answer_node"]`) — the UI renders the problem and the student submits an answer
 5. `evaluate_answer_node` runs `symbolic_check()`: parses the student's input with SymPy and checks `simplify(student - correct) == 0`. If wrong, calls Ollama to categorize the error type
 6. `retrieve_explanation_node` queries ChromaDB using the **problem text** as the semantic query (with topic/subtopic/difficulty/error-category metadata filters), returning the 3 most relevant knowledge chunks
-7. `generate_feedback_node` calls Ollama with the retrieved chunks injected — produces a structured explanation: *Result*, *Explanation* (step-by-step), and *What went wrong* (for incorrect answers, grounded in the error category)
+7. `generate_feedback_node` calls Ollama with the retrieved chunks injected — produces a two-part response: *Result* (right/wrong + the correct answer) and *Explanation*, a numbered step-by-step LaTeX derivation. The error category from step 5 is never shown to the student — it only sharpens retrieval and accumulates in the student's error-pattern statistics
 8. `update_state_node` updates the mastery score with an EMA, adjusts difficulty, and saves to disk
 9. `adapt_next_node` sets up the next topic and difficulty in state, then the graph reaches **END**
 10. **UI enters reviewing phase** — the problem, the student's answer, and the full explanation are displayed together. The student clicks "Next problem →" to trigger a new turn from step 1
@@ -237,6 +238,17 @@ Difficulty adapts separately: +1 on a correct answer, −1 on wrong, clamped to 
 
 The production path for mastery modeling would be Bayesian Knowledge Tracing (BKT), which maintains per-skill estimates of learning rate, guess probability, and slip probability. EMA is used here because it demonstrates the concept clearly without requiring training data for parameter estimation.
 
+### NiceGUI + KaTeX — the interface
+
+The UI is a [NiceGUI](https://nicegui.io) app: a single Python process that serves a modern, event-driven web interface and calls the LangGraph `graph` singleton in-process — no separate backend, no Node toolchain, one command to run (`python src/ui/app.py`).
+
+Why NiceGUI over Streamlit (which this project originally used): Streamlit re-runs the entire script on every interaction, which makes each click feel slow and forces awkward `session_state` bookkeeping. NiceGUI is event-driven — a button click invokes one async handler, and only the elements that change are updated over a persistent websocket. The result is an interface that responds instantly and code that reads like ordinary event handlers.
+
+Two implementation details worth knowing:
+
+- **LaTeX rendering**: problems and explanations contain `$...$` LaTeX. KaTeX (loaded via CDN with its auto-render extension) typesets them in the browser. A `MutationObserver` re-runs the renderer whenever the DOM changes, so newly generated problems and feedback are typeset automatically. The pass is idempotent — rendering consumes the `$` delimiters, so the observer cannot loop.
+- **Responsiveness during LLM calls**: `graph.stream()` blocks on Ollama for seconds at a time. The UI consumes the stream one chunk at a time on a worker thread (`run.io_bound`), appending each completed node ("Checking answer (SymPy symbolic solver)", "Searching knowledge base (ChromaDB RAG)", …) to a live operation feed — the same under-the-hood transparency a `graph.stream` loop gives in a terminal.
+
 ---
 
 ## Knowledge Base
@@ -311,3 +323,7 @@ KNOWLEDGE_BASE_DIR=data/knowledge_base
 **Why ChromaDB instead of a simple list of strings?** Metadata filtering means retrieved chunks are relevant to the specific topic, difficulty, and error type — not just semantically similar. A sign error in algebra should retrieve content about sign errors, not general algebra explanations. This is the difference between useful feedback and generic feedback.
 
 **Why local models (Ollama) instead of an API?** The project is fully self-contained: no API keys, no cost per run, no data leaving the machine. `llama3.1:8b` is capable enough for problem generation and explanation. The model is parameterized in `.env` and can be swapped without code changes.
+
+**Why NiceGUI instead of Streamlit or a React frontend?** Streamlit's rerun-per-interaction model made every click slow. A React/shadcn split was considered but rejected: it would require a separate backend API, a Node toolchain, and two processes — at odds with a demo that should run with one command. NiceGUI is the middle path: a real event-driven UI, modern look, LaTeX support via KaTeX, and still a single pip-installed Python process calling the graph directly.
+
+**Why pure-notation problems instead of word problems?** Two reasons. Reliability: word problems require the LLM to keep the story and the underlying math consistent, which is where answer-mismatch hallucinations crept in. Clarity: the SymPy expression and the rendered problem are now two views of exactly the same mathematical object, which makes verification airtight.

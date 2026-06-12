@@ -7,8 +7,13 @@ Subtopic: {subtopic}
 Difficulty (1=easiest, 5=hardest): {difficulty}
 Recent problems (avoid repeating): {recent_problems}
 
+The problem must be written PURELY MATHEMATICALLY — no word problems, no story contexts, no named people or objects. Just mathematical notation.
+
 Return ONLY valid JSON with no markdown, no explanation, no code fences. The JSON must have exactly these fields:
-- "problem_text": the problem as a plain string the student will read
+- "problem_text": the problem in pure mathematical notation, with ALL math wrapped in $...$ LaTeX delimiters. Formats:
+  - Arithmetic / fractions / numeric: the bare expression ending with =, e.g. "$\\\\frac{{1}}{{6}} + \\\\frac{{2}}{{3}} =$"
+  - Equations: the equation, then the unknown, e.g. "$3x - 9 = 12$,  $x = ?$"
+  IMPORTANT: inside the JSON string every LaTeX backslash must be DOUBLED (write \\\\frac, \\\\times, \\\\sqrt).
 - "sympy_expression": a valid Python/SymPy expression. Rules by topic:
   - Fractions / arithmetic: write the raw computation using Rational(a,b). Examples: "Rational(1,6) + Rational(2,3)", "Rational(3,4) * Rational(2,5)"
   - Algebra (equation to solve): use Eq(lhs, rhs) to express the equation exactly as written. Examples: "Eq(2*x + 5, 11)", "Eq(3*x - 9, 12)". The system will call solve() itself — do NOT call solve() yourself.
@@ -18,8 +23,8 @@ Return ONLY valid JSON with no markdown, no explanation, no code fences. The JSO
 - "difficulty": the difficulty integer exactly as given
 
 Example outputs:
-{{"problem_text": "What is 1/6 + 2/3?", "sympy_expression": "Rational(1,6) + Rational(2,3)", "topic": "fractions", "subtopic": "addition_subtraction", "difficulty": 2}}
-{{"problem_text": "Solve for x: 2x + 5 = 11", "sympy_expression": "solve(2*x + 5 - 11, x)", "topic": "algebra", "subtopic": "linear_equations", "difficulty": 2}}"""
+{{"problem_text": "$\\\\frac{{1}}{{6}} + \\\\frac{{2}}{{3}} =$", "sympy_expression": "Rational(1,6) + Rational(2,3)", "topic": "fractions", "subtopic": "addition_subtraction", "difficulty": 2}}
+{{"problem_text": "$3x - 9 = 12$,  $x = ?$", "sympy_expression": "Eq(3*x - 9, 12)", "topic": "algebra", "subtopic": "linear_equations", "difficulty": 2}}"""
 
 CATEGORIZE_ERROR_PROMPT = """A student answered a math problem incorrectly. Categorize the error type.
 
@@ -40,18 +45,14 @@ Problem: {problem}
 Student's answer: {student_answer}
 Correct answer: {correct_answer}
 Was correct: {is_correct}
-Error type (if wrong): {error_category}
 
 Reference material from the knowledge base:
 {retrieved_content}
 
-Write your response in the following structure. Use plain text, no markdown headers or bullet symbols.
+Write your response in exactly this two-section structure:
 
 Result: One sentence — state whether the student was right or wrong, and what the correct answer is.
 
-Explanation: Using the reference material above, walk through how to solve this specific problem step by step. Be concrete and specific to the numbers in this problem, not generic. Write 3-5 sentences.
+Explanation: A step-by-step derivation of the solution, written the way it would appear in a mathematics paper. Number each step. Put each step on its own line. Every mathematical expression must be wrapped in $...$ LaTeX delimiters (e.g. $\\frac{{1}}{{6}} + \\frac{{2}}{{3}} = \\frac{{1}}{{6}} + \\frac{{4}}{{6}} = \\frac{{5}}{{6}}$). Be concrete and specific to the numbers in this problem. Use the reference material to ground the explanation. No filler advice, no "be more careful" — just the mathematics.
 
-If the student was WRONG, add this section:
-What went wrong: Based on the error type "{error_category}", explain in 1-2 sentences exactly what mistake the student likely made and how to avoid it next time.
-
-Be encouraging. Write for a middle school student."""
+Write for a middle school student: clear and precise, but friendly."""

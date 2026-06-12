@@ -4,13 +4,16 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Streamlit UI  (src/ui/app.py)                                      │
+│  NiceGUI UI  (src/ui/app.py) — single process, event-driven         │
 │                                                                     │
 │  ┌──────────────────┐  ┌───────────────┐  ┌─────────────────────┐  │
-│  │  Problem Display │  │  Answer Input │  │  Mastery Dashboard  │  │
+│  │ Problem (KaTeX)  │  │  Answer Input │  │  Mastery Dashboard  │  │
 │  └──────────────────┘  └───────────────┘  └─────────────────────┘  │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  Live operation feed (per-node labels during graph.stream)  │   │
+│  └─────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────┬───────────────────────────────────────┘
-                              │ graph.invoke(TutorState)
+                              │ graph.stream(TutorState)  (in-process)
 ┌─────────────────────────────▼───────────────────────────────────────┐
 │  LangGraph Agent  (src/agent/)                                      │
 │                                                                     │
@@ -74,12 +77,15 @@
         30% chance: pick first unattempted topic (exploration)
         → current_topic, current_difficulty set in TutorState
    └─ generate_problem:
-        Prompt: "Generate a difficulty-{n} problem on {topic}/{subtopic}. Return JSON."
-        Ollama response → validated against schema → retry up to 2x if malformed
+        Prompt: "Generate a difficulty-{n} problem on {topic}/{subtopic} in pure
+                 mathematical notation with $...$ LaTeX. Return JSON."
+        Ollama response → _parse_problem_json (repairs LaTeX-in-JSON escaping)
+        → sympy_expression evaluated by SymPy itself (Eq solved, lists unwrapped)
+        → retry up to 2x if malformed or symbolic
         sympy_answer stored in TutorState (never shown to student)
-        → current_problem (text only) passed to UI
+        → current_problem (LaTeX text) passed to UI
 
-3. UI renders problem, student types answer, submits
+3. UI renders problem (KaTeX typesets the $...$ math), student types answer, submits
 
 4. evaluate_answer
    └─ symbolic_check(student_input, sympy_answer):
@@ -97,10 +103,12 @@
         n_results = 3 → list of chunk text strings
 
 6. generate_feedback
-   └─ Prompt: system context + problem + student_answer + is_correct +
-              error_category + retrieved_chunks (injected)
-        Ollama → feedback string
-   └─ Feedback displayed in UI
+   └─ Prompt: system context + problem + student_answer + correct_answer +
+              is_correct + retrieved_chunks (injected)
+        Ollama → "Result:" + "Explanation:" (numbered LaTeX derivation)
+   └─ error_category is internal only: it filters retrieval (step 5) and
+      accumulates in error_pattern_counts (step 7) but is never displayed
+   └─ Feedback rendered in UI with KaTeX
 
 7. update_state
    └─ AttemptRecord created and appended to StudentState.attempt_history
@@ -297,14 +305,15 @@ A mastery score ≥ 0.8 after ≥ 5 attempts indicates strong performance on tha
 | Student state | Pydantic + JSON | SQLite (adequate for demo scale; JSON is human-readable for debugging) |
 | Mastery algorithm | EMA (α=0.2) | Bayesian Knowledge Tracing (requires per-skill parameter estimation; overkill for v1) |
 | Embeddings | sentence-transformers/all-MiniLM-L6-v2 | OpenAI text-embedding-3-small (requires API; MiniLM runs CPU-locally) |
-| UI | Streamlit | FastAPI + React (Streamlit sufficient for demo; avoids frontend build tooling) |
+| UI | NiceGUI | Streamlit (rerun-per-interaction model too slow; replaced); React + shadcn over FastAPI (rejected: two processes + Node toolchain conflicts with one-command setup) |
+| Math rendering | KaTeX (CDN, auto-render + MutationObserver) | MathJax (heavier); markdown2 latex extra (MathML output, weaker typography) |
 
 ---
 
 ## Dependency Graph
 
 ```
-app.py (Streamlit UI)
+app.py (NiceGUI UI)
     └── graph.py (LangGraph StateGraph)
             ├── nodes.py
             │       ├── prompts.py          (prompt templates)

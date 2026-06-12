@@ -3,63 +3,72 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import os
-import streamlit as st
+import html as html_lib
+import re
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
+from nicegui import run, ui
+
 from src.agent.graph import graph
 from src.agent.state import TutorState
 
-THREAD_CONFIG = lambda sid: {"configurable": {"thread_id": sid}}
-
 NODE_LABELS = {
-    "load_state_node":          "Loading student profile",
-    "select_topic_node":        "Selecting topic and difficulty",
-    "generate_problem_node":    "Generating problem (Ollama)",
-    "evaluate_answer_node":     "Checking answer (SymPy symbolic solver)",
+    "load_state_node": "Loading student profile",
+    "select_topic_node": "Selecting topic and difficulty",
+    "generate_problem_node": "Generating problem (Ollama)",
+    "evaluate_answer_node": "Checking answer (SymPy symbolic solver)",
     "retrieve_explanation_node": "Searching knowledge base (ChromaDB RAG)",
-    "generate_feedback_node":   "Writing feedback (Ollama)",
-    "update_state_node":        "Saving progress and updating mastery",
-    "adapt_next_node":          "Adjusting difficulty",
+    "generate_feedback_node": "Writing explanation (Ollama)",
+    "update_state_node": "Saving progress and updating mastery",
+    "adapt_next_node": "Adjusting difficulty",
 }
 
+TOPIC_LABELS = {
+    "fractions": "Fractions",
+    "ratios": "Ratios",
+    "algebra": "Algebra",
+    "geometry": "Geometry",
+}
 
-def run_until_pause(graph_input, config, status_label):
-    """Stream the graph from its current point to the next interrupt (or END),
-    showing a live per-node status. Returns the resulting state values."""
-    with st.status(status_label, expanded=True) as status:
-        for chunk in graph.stream(graph_input, config=config, stream_mode="updates"):
-            node_name = list(chunk.keys())[0]
-            label = NODE_LABELS.get(node_name, node_name)
-            status.update(label=f"⚙ {label}…")
-            st.write(f"✓ {label}")
-        status.update(label="Done", state="complete", expanded=False)
-    return graph.get_state(config).values
+DIFFICULTY_LABELS = {1: "Intro", 2: "Easy", 3: "Medium", 4: "Hard", 5: "Challenge"}
+
+# KaTeX auto-render: re-renders $...$ on every DOM change (idempotent — the
+# delimiters are consumed on first render, so the observer cannot loop).
+KATEX_HEAD = """
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"></script>
+<script>
+  function renderMath() {
+    if (window.renderMathInElement) {
+      renderMathInElement(document.body, {
+        delimiters: [
+          {left: '$$', right: '$$', display: true},
+          {left: '$', right: '$', display: false},
+        ],
+        throwOnError: false,
+      });
+    }
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    renderMath();
+    const observer = new MutationObserver(() => {
+      clearTimeout(window._mathTimer);
+      window._mathTimer = setTimeout(renderMath, 50);
+    });
+    observer.observe(document.body, {childList: true, subtree: true});
+  });
+</script>
+"""
+
+_SENTINEL = object()
 
 
-st.set_page_config(page_title="Math Tutor", page_icon="📐", layout="centered")
-st.title("📐 Math Tutor")
-
-# ── Student identity ──────────────────────────────────────────────────────────
-if "student_id" not in st.session_state:
-    st.session_state.student_id = None
-
-if st.session_state.student_id is None:
-    st.subheader("Welcome! What's your name?")
-    name = st.text_input("Your name", key="name_input")
-    if st.button("Start learning") and name.strip():
-        st.session_state.student_id = name.strip().lower().replace(" ", "_")
-        st.rerun()
-    st.stop()
-
-student_id = st.session_state.student_id
-config = THREAD_CONFIG(student_id)
-
-# ── Bootstrap: generate the first problem ─────────────────────────────────────
-if "graph_started" not in st.session_state:
-    initial: TutorState = {
+def initial_tutor_state(student_id: str) -> TutorState:
+    return {
         "student_id": student_id,
         "current_topic": "",
         "current_subtopic": "",
@@ -73,95 +82,239 @@ if "graph_started" not in st.session_state:
         "mastery": {},
         "session_history": [],
     }
-    run_until_pause(initial, config, "Starting session…")
-    st.session_state.graph_started = True
-    st.session_state.phase = "answering"   # "answering" | "reviewing"
-    st.session_state.last_feedback = None
-    st.session_state.attempt_count = 0
 
-# ── Read current graph state ──────────────────────────────────────────────────
-state_values: TutorState = graph.get_state(config).values
 
-# ── Sidebar: mastery dashboard ────────────────────────────────────────────────
-with st.sidebar:
-    st.subheader(f"👋 {student_id.replace('_', ' ').title()}")
-    st.markdown(f"**Attempts this session:** {st.session_state.attempt_count}")
-    st.divider()
-    st.subheader("Mastery")
-    mastery = state_values.get("mastery", {})
-    topic_labels = {"fractions": "Fractions", "ratios": "Ratios", "algebra": "Algebra", "geometry": "Geometry"}
-    for topic, label in topic_labels.items():
-        score = mastery.get(topic, 0.0)
-        st.write(f"**{label}**")
-        st.progress(score, text=f"{score:.0%}")
+def feedback_to_html(text: str) -> str:
+    """Plain LLM text → HTML. Escapes everything, bolds section headers,
+    preserves line breaks. LaTeX ($...$) is left intact for KaTeX."""
+    escaped = html_lib.escape(text)
+    # LLM sometimes emits markdown bold (**Result:**) — convert it
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", escaped)
+    # Bold bare section headers at line start (skip ones already bolded above)
+    escaped = re.sub(r"(?m)^(Result:|Explanation:)", r"<b>\1</b>", escaped)
+    return escaped.replace("\n", "<br>")
 
-# ── Current problem ───────────────────────────────────────────────────────────
-topic = state_values.get("current_topic", "")
-subtopic = state_values.get("current_subtopic", "")
-difficulty = state_values.get("current_difficulty", 1)
-problem_text = state_values.get("current_problem", "")
 
-difficulty_label = {1: "Intro", 2: "Easy", 3: "Medium", 4: "Hard", 5: "Challenge"}.get(difficulty, "")
-if topic:
-    st.caption(f"{topic.capitalize()} · {subtopic.replace('_', ' ')}  ·  {difficulty_label}")
+@ui.page("/")
+def main_page():
+    ui.add_head_html(KATEX_HEAD)
+    ui.colors(primary="#4f46e5")
+    ui.query("body").classes("bg-slate-100")
 
-st.markdown(f"### {problem_text}" if problem_text else "### Loading problem…")
+    session = {
+        "student_id": None,
+        "config": None,
+        "phase": "name",  # name | working | answering | reviewing
+        "attempts": 0,
+        "last": None,       # snapshot shown in the reviewing phase
+        "status_col": None,  # live operation feed target while working
+    }
 
-# ══════════════════════════════════════════════════════════════════════════════
-# ANSWERING PHASE — show the answer form
-# ══════════════════════════════════════════════════════════════════════════════
-if st.session_state.phase == "answering":
-    with st.form("answer_form", clear_on_submit=True):
-        answer = st.text_input("Your answer", placeholder="e.g.  5  or  3/4  or  x=2")
-        submitted = st.form_submit_button("Submit")
+    def graph_values() -> dict:
+        return graph.get_state(session["config"]).values
 
-    if submitted and answer.strip():
-        student_answer_text = answer.strip()
-        graph.update_state(config, {"student_answer": student_answer_text})
+    # ── Sidebar ───────────────────────────────────────────────────────────────
+    with ui.left_drawer(value=True).classes("bg-white border-r border-slate-200"):
+        drawer = ui.column().classes("w-full gap-1 p-2")
+
+    def refresh_drawer():
+        drawer.clear()
+        with drawer:
+            if not session["student_id"]:
+                ui.label("Math Tutor").classes("text-lg font-semibold text-slate-700")
+                ui.label("Adaptive K-12 practice").classes("text-xs text-slate-400")
+                return
+            name = session["student_id"].replace("_", " ").title()
+            ui.label(f"👋 {name}").classes("text-lg font-semibold text-slate-700")
+            ui.label(f"Attempts this session: {session['attempts']}").classes(
+                "text-xs text-slate-500"
+            )
+            ui.separator().classes("my-2")
+            ui.label("Mastery").classes("text-sm font-semibold text-slate-600")
+            mastery = graph_values().get("mastery", {}) if session["config"] else {}
+            for topic, label in TOPIC_LABELS.items():
+                score = mastery.get(topic, 0.0)
+                with ui.row().classes("w-full items-center justify-between mt-2"):
+                    ui.label(label).classes("text-sm text-slate-700")
+                    ui.label(f"{score:.0%}").classes("text-xs text-slate-400")
+                ui.linear_progress(value=round(score, 2), show_value=False).classes(
+                    "w-full"
+                ).props("rounded size=8px")
+
+    # ── Main area ─────────────────────────────────────────────────────────────
+    @ui.refreshable
+    def main_area():
+        if session["phase"] == "name":
+            with ui.card().classes(
+                "w-full max-w-md mx-auto mt-24 p-8 rounded-xl shadow-sm border border-slate-200"
+            ):
+                ui.label("📐 Math Tutor").classes("text-2xl font-bold text-slate-800")
+                ui.label("What's your name?").classes("text-sm text-slate-500 mb-2")
+                name_input = ui.input(placeholder="Your name").classes("w-full").props(
+                    "outlined dense"
+                )
+                ui.button(
+                    "Start learning",
+                    on_click=lambda: start_session(name_input.value),
+                ).classes("w-full mt-4")
+                name_input.on("keydown.enter", lambda: start_session(name_input.value))
+            return
+
+        values = graph_values()
+        problem = (
+            session["last"]["problem"]
+            if session["phase"] == "reviewing" and session["last"]
+            else values.get("current_problem", "")
+        )
+        topic = values.get("current_topic", "")
+        subtopic = values.get("current_subtopic", "")
+        difficulty = values.get("current_difficulty", 2)
+
+        with ui.column().classes("w-full max-w-2xl mx-auto mt-10 px-4 gap-4"):
+            # Problem card
+            with ui.card().classes(
+                "w-full p-8 rounded-xl shadow-sm border border-slate-200"
+            ):
+                if topic:
+                    with ui.row().classes("gap-2 mb-3"):
+                        ui.badge(TOPIC_LABELS.get(topic, topic)).props(
+                            "color=indigo-1 text-color=indigo-9"
+                        ).classes("px-2 py-1")
+                        ui.badge(f"{subtopic.replace('_', ' ')}").props(
+                            "color=slate-2 text-color=slate-8"
+                        ).classes("px-2 py-1")
+                        ui.badge(DIFFICULTY_LABELS.get(difficulty, "")).props(
+                            "color=amber-1 text-color=amber-9"
+                        ).classes("px-2 py-1")
+                ui.html(
+                    f'<div class="text-2xl text-slate-800">{html_lib.escape(problem)}</div>'
+                )
+
+            if session["phase"] == "working":
+                with ui.card().classes(
+                    "w-full p-4 rounded-xl shadow-sm border border-slate-200"
+                ):
+                    with ui.row().classes("items-center gap-2"):
+                        ui.spinner(size="sm", color="primary")
+                        ui.label("Working…").classes("text-sm text-slate-500")
+                    session["status_col"] = ui.column().classes("gap-0 mt-2")
+
+            elif session["phase"] == "answering":
+                with ui.row().classes("w-full gap-2"):
+                    answer_input = (
+                        ui.input(placeholder="Your answer — e.g. 5, 3/4, or 1.5")
+                        .classes("flex-grow")
+                        .props("outlined dense")
+                    )
+                    ui.button(
+                        "Submit", on_click=lambda: submit_answer(answer_input.value)
+                    )
+                    answer_input.on(
+                        "keydown.enter", lambda: submit_answer(answer_input.value)
+                    )
+
+            elif session["phase"] == "reviewing":
+                fb = session["last"] or {}
+                if fb.get("is_correct"):
+                    banner_classes = "bg-green-50 border-green-200 text-green-800"
+                    banner_text = f"✓ Correct — your answer: {fb.get('student_answer', '')}"
+                elif fb.get("parse_error"):
+                    banner_classes = "bg-amber-50 border-amber-200 text-amber-800"
+                    banner_text = (
+                        f"⚠ Couldn't read \"{fb.get('student_answer', '')}\" as a number"
+                    )
+                else:
+                    banner_classes = "bg-red-50 border-red-200 text-red-800"
+                    banner_text = f"✗ Not quite — your answer: {fb.get('student_answer', '')}"
+
+                with ui.card().classes(
+                    f"w-full p-4 rounded-xl border {banner_classes} shadow-none"
+                ):
+                    ui.label(banner_text).classes("font-medium")
+
+                with ui.card().classes(
+                    "w-full p-6 rounded-xl shadow-sm border border-slate-200"
+                ):
+                    ui.html(
+                        f'<div class="text-base leading-relaxed text-slate-700">'
+                        f'{feedback_to_html(fb.get("feedback", "") or "No explanation was generated.")}'
+                        f"</div>"
+                    )
+
+                ui.button("Next problem →", on_click=next_problem).classes("mt-1")
+
+    # ── Graph execution ───────────────────────────────────────────────────────
+    async def stream_graph(graph_input) -> None:
+        """Consume graph.stream chunk by chunk on a worker thread, appending
+        each completed node to the live status feed on the event loop."""
+        iterator = graph.stream(
+            graph_input, config=session["config"], stream_mode="updates"
+        )
+        while True:
+            chunk = await run.io_bound(lambda: next(iterator, _SENTINEL))
+            if chunk is _SENTINEL:
+                break
+            node = next(iter(chunk))
+            if node.startswith("__"):
+                continue
+            if session["status_col"] is not None:
+                with session["status_col"]:
+                    ui.label(f"✓ {NODE_LABELS.get(node, node)}").classes(
+                        "text-xs text-slate-400"
+                    )
+
+    async def start_session(name: str) -> None:
+        if not name or not name.strip():
+            ui.notify("Please enter your name", type="warning")
+            return
+        session["student_id"] = name.strip().lower().replace(" ", "_")
+        session["config"] = {"configurable": {"thread_id": session["student_id"]}}
+        session["phase"] = "working"
+        refresh_drawer()
+        main_area.refresh()
+        await stream_graph(initial_tutor_state(session["student_id"]))
+        session["phase"] = "answering"
+        refresh_drawer()
+        main_area.refresh()
+
+    async def submit_answer(answer: str) -> None:
+        if not answer or not answer.strip():
+            return
+        student_answer = answer.strip()
+        graph.update_state(session["config"], {"student_answer": student_answer})
+        session["phase"] = "working"
+        main_area.refresh()
 
         # Resume from the interrupt: evaluate → retrieve → feedback → update → adapt → END
-        updated = run_until_pause(None, config, "Checking your answer…")
-        evaluation = updated.get("evaluation", {})
+        await stream_graph(None)
 
-        st.session_state.last_feedback = {
+        values = graph_values()
+        evaluation = values.get("evaluation", {})
+        session["last"] = {
             "is_correct": evaluation.get("is_correct", False),
             "parse_error": evaluation.get("parse_error", False),
-            "error_category": evaluation.get("error_category"),
-            "feedback": updated.get("feedback", ""),
-            "problem": problem_text,
-            "student_answer": student_answer_text,
+            "feedback": values.get("feedback", ""),
+            "problem": values.get("current_problem", ""),
+            "student_answer": student_answer,
         }
-        st.session_state.attempt_count += 1
-        st.session_state.phase = "reviewing"
-        st.rerun()
+        session["attempts"] += 1
+        session["phase"] = "reviewing"
+        refresh_drawer()
+        main_area.refresh()
 
-# ══════════════════════════════════════════════════════════════════════════════
-# REVIEWING PHASE — show full feedback + "Next problem" button
-# ══════════════════════════════════════════════════════════════════════════════
-elif st.session_state.phase == "reviewing":
-    fb = st.session_state.last_feedback or {}
+    async def next_problem() -> None:
+        session["phase"] = "working"
+        session["last"] = None
+        main_area.refresh()
+        # Fresh turn: load_state → select_topic → generate_problem → pause
+        await stream_graph({"student_answer": ""})
+        session["phase"] = "answering"
+        refresh_drawer()
+        main_area.refresh()
 
-    if fb.get("is_correct"):
-        st.success(f"✓ Correct!  Your answer: **{fb.get('student_answer', '')}**")
-    elif fb.get("parse_error"):
-        st.warning(f"⚠ Couldn't read your answer as a number.  You entered: **{fb.get('student_answer', '')}**")
-    else:
-        cat = fb.get("error_category")
-        cat_note = f"  ·  error type: *{cat}*" if cat else ""
-        st.error(f"✗ Not quite.  Your answer: **{fb.get('student_answer', '')}**{cat_note}")
+    refresh_drawer()
+    main_area()
 
-    # Full LLM explanation — preserve section structure regardless of LLM newline habits
-    feedback_text = fb.get("feedback", "") or "_No explanation was generated._"
-    for section in ("Result:", "Explanation:", "What went wrong:"):
-        feedback_text = feedback_text.replace(section, f"\n\n**{section}**")
 
-    with st.container(border=True):
-        st.markdown(feedback_text.strip())
-
-    if st.button("Next problem →", type="primary"):
-        # Start a fresh turn: load_state → select_topic → generate_problem → pause.
-        # generate_problem_node clears the previous answer/evaluation/feedback.
-        run_until_pause({"student_answer": ""}, config, "Generating next problem…")
-        st.session_state.last_feedback = None
-        st.session_state.phase = "answering"
-        st.rerun()
+if __name__ in {"__main__", "__mp_main__"}:
+    ui.run(title="Math Tutor", port=8501, reload=False, show=False)

@@ -5,7 +5,7 @@ chromadb>=0.5
 sentence-transformers>=3.0
 sympy>=1.13
 pydantic>=2.0
-streamlit>=1.35
+nicegui>=2.0
 python-dotenv>=1.0
 # torch 2.2.2 (Python 3.12) was compiled against NumPy 1.x
 numpy<2
