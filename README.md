@@ -246,7 +246,7 @@ Why NiceGUI over Streamlit (which this project originally used): Streamlit re-ru
 
 Two implementation details worth knowing:
 
-- **LaTeX rendering**: problems and explanations contain `$...$` LaTeX. KaTeX (loaded via CDN with its auto-render extension) typesets them in the browser. A `MutationObserver` re-runs the renderer whenever the DOM changes, so newly generated problems and feedback are typeset automatically. The pass is idempotent — rendering consumes the `$` delimiters, so the observer cannot loop.
+- **LaTeX rendering**: problems and explanations contain `$...$` LaTeX. KaTeX (loaded via CDN with its auto-render extension) typesets them in the browser, scoped strictly to the `.math-content` containers whose innerHTML Vue treats as opaque. This scoping is load-bearing: running KaTeX's auto-render on `document.body` merges adjacent text nodes during its scan, which destroys the empty-text-node anchors Vue 3 uses for fragments — the next Vue patch then crashes and the UI freezes. The server triggers typesetting (`typesetMath()`) after each phase change, via a client handle captured at page build (the ambient client context is lost after `await` in NiceGUI handlers).
 - **Responsiveness during LLM calls**: `graph.stream()` blocks on Ollama for seconds at a time. The UI consumes the stream one chunk at a time on a worker thread (`run.io_bound`), appending each completed node ("Checking answer (SymPy symbolic solver)", "Searching knowledge base (ChromaDB RAG)", …) to a live operation feed — the same under-the-hood transparency a `graph.stream` loop gives in a terminal.
 
 ---

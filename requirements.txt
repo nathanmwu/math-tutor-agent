@@ -10,3 +10,7 @@ python-dotenv>=1.0
 # torch 2.2.2 (Python 3.12) was compiled against NumPy 1.x
 numpy<2
 transformers>=4.40,<5
+
+# test dependencies
+pytest>=8
+pytest-asyncio>=1.0

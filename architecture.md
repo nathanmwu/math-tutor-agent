@@ -306,7 +306,7 @@ A mastery score ≥ 0.8 after ≥ 5 attempts indicates strong performance on tha
 | Mastery algorithm | EMA (α=0.2) | Bayesian Knowledge Tracing (requires per-skill parameter estimation; overkill for v1) |
 | Embeddings | sentence-transformers/all-MiniLM-L6-v2 | OpenAI text-embedding-3-small (requires API; MiniLM runs CPU-locally) |
 | UI | NiceGUI | Streamlit (rerun-per-interaction model too slow; replaced); React + shadcn over FastAPI (rejected: two processes + Node toolchain conflicts with one-command setup) |
-| Math rendering | KaTeX (CDN, auto-render + MutationObserver) | MathJax (heavier); markdown2 latex extra (MathML output, weaker typography) |
+| Math rendering | KaTeX (CDN auto-render, scoped to `.math-content` divs — body-wide rendering corrupts Vue's fragment anchors) | MathJax (heavier); markdown2 latex extra (MathML output, weaker typography) |
 
 ---
 

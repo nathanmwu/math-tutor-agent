@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from nicegui import run, ui
+from nicegui import context, run, ui
 
 from src.agent.graph import graph
 from src.agent.state import TutorState
@@ -35,32 +35,28 @@ TOPIC_LABELS = {
 
 DIFFICULTY_LABELS = {1: "Intro", 2: "Easy", 3: "Medium", 4: "Hard", 5: "Challenge"}
 
-# KaTeX auto-render: re-renders $...$ on every DOM change (idempotent — the
-# delimiters are consumed on first render, so the observer cannot loop).
+# KaTeX typesetting, scoped strictly to .math-content containers (ui.html
+# elements whose innerHTML is opaque to Vue). NEVER run KaTeX on document.body:
+# its text-node scan merges/normalizes adjacent text nodes, which destroys the
+# empty-text-node anchors Vue 3 uses for fragments — the next Vue patch then
+# crashes with "Cannot read property 'insertBefore' of null" and the UI dies.
 KATEX_HEAD = """
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"></script>
 <script>
-  function renderMath() {
-    if (window.renderMathInElement) {
-      renderMathInElement(document.body, {
+  window.typesetMath = function () {
+    if (!window.renderMathInElement) return;
+    document.querySelectorAll('.math-content').forEach(function (el) {
+      renderMathInElement(el, {
         delimiters: [
           {left: '$$', right: '$$', display: true},
           {left: '$', right: '$', display: false},
         ],
         throwOnError: false,
       });
-    }
-  }
-  document.addEventListener('DOMContentLoaded', () => {
-    renderMath();
-    const observer = new MutationObserver(() => {
-      clearTimeout(window._mathTimer);
-      window._mathTimer = setTimeout(renderMath, 50);
     });
-    observer.observe(document.body, {childList: true, subtree: true});
-  });
+  };
 </script>
 """
 
@@ -187,7 +183,7 @@ def main_page():
                             "color=amber-1 text-color=amber-9"
                         ).classes("px-2 py-1")
                 ui.html(
-                    f'<div class="text-2xl text-slate-800">{html_lib.escape(problem)}</div>'
+                    f'<div class="math-content text-2xl text-slate-800">{html_lib.escape(problem)}</div>'
                 )
 
             if session["phase"] == "working":
@@ -236,12 +232,21 @@ def main_page():
                     "w-full p-6 rounded-xl shadow-sm border border-slate-200"
                 ):
                     ui.html(
-                        f'<div class="text-base leading-relaxed text-slate-700">'
+                        f'<div class="math-content text-base leading-relaxed text-slate-700">'
                         f'{feedback_to_html(fb.get("feedback", "") or "No explanation was generated.")}'
                         f"</div>"
                     )
 
                 ui.button("Next problem →", on_click=next_problem).classes("mt-1")
+
+    # Captured at page build: the ambient client context is lost after awaits
+    # in event handlers, so ui.run_javascript would silently target nothing.
+    page_client = context.client
+
+    def typeset() -> None:
+        """Typeset $...$ inside .math-content containers. The 50 ms delay lets
+        Vue finish applying the preceding DOM updates first."""
+        page_client.run_javascript("setTimeout(window.typesetMath, 50)")
 
     # ── Graph execution ───────────────────────────────────────────────────────
     async def stream_graph(graph_input) -> None:
@@ -276,6 +281,7 @@ def main_page():
         session["phase"] = "answering"
         refresh_drawer()
         main_area.refresh()
+        typeset()
 
     async def submit_answer(answer: str) -> None:
         if not answer or not answer.strip():
@@ -301,6 +307,7 @@ def main_page():
         session["phase"] = "reviewing"
         refresh_drawer()
         main_area.refresh()
+        typeset()
 
     async def next_problem() -> None:
         session["phase"] = "working"
@@ -311,10 +318,15 @@ def main_page():
         session["phase"] = "answering"
         refresh_drawer()
         main_area.refresh()
+        typeset()
 
     refresh_drawer()
     main_area()
 
 
+
+
+
+
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.run(title="Math Tutor", port=8501, reload=False, show=False)
+    ui.run(title="Math Tutor", port=8501, reload=False, show=False, reconnect_timeout=30)

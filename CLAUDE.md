@@ -62,7 +62,7 @@ Full requirements and API contracts: see [project_spec.md](project_spec.md).
 
 **Pydantic + JSON over SQLite** — Human-readable, git-friendly, zero infrastructure. One file per student eliminates locking. SQLite is a trivial upgrade if cross-student querying becomes needed.
 
-**NiceGUI over Streamlit / React+shadcn** — Streamlit's rerun-per-interaction model was too slow; a React frontend would force a backend API split, Node toolchain, and two processes. NiceGUI is event-driven, single-process, pip-only, and calls the graph in-process. LaTeX is rendered by KaTeX (CDN auto-render + MutationObserver in `src/ui/app.py:KATEX_HEAD`).
+**NiceGUI over Streamlit / React+shadcn** — Streamlit's rerun-per-interaction model was too slow; a React frontend would force a backend API split, Node toolchain, and two processes. NiceGUI is event-driven, single-process, pip-only, and calls the graph in-process. LaTeX is rendered by KaTeX (`src/ui/app.py:KATEX_HEAD`), scoped strictly to `.math-content` divs — NEVER run KaTeX on `document.body`: its text-node scan destroys Vue's empty-text-node fragment anchors and freezes the UI. Trigger typesetting via the `page_client` handle captured at page build (ambient client context is lost after `await` in handlers).
 
 **Pure-notation problems over word problems** — Problems are written purely mathematically (`$\frac{1}{6} + \frac{2}{3} =$`, `$3x - 9 = 12$, $x = ?$`). Word problems let the story and the math drift apart (the source of past answer-mismatch bugs); pure notation keeps `problem_text` and `sympy_expression` two views of the same object.
 
