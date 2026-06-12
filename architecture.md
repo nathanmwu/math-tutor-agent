@@ -81,8 +81,10 @@
                  mathematical notation with $...$ LaTeX. Return JSON."
         Ollama response → _parse_problem_json (repairs LaTeX-in-JSON escaping)
         → sympy_expression evaluated by SymPy itself (Eq solved, lists unwrapped)
-        → retry up to 2x if malformed or symbolic
+        → retry up to 2x if malformed, symbolic, or non-numeric (booleans rejected)
         sympy_answer stored in TutorState (never shown to student)
+        solution_steps computed by generate_solution_steps(sympy_expression) —
+          SymPy-verified LaTeX derivation, rendered verbatim in the review phase
         → current_problem (LaTeX text) passed to UI
 
 3. UI renders problem (KaTeX typesets the $...$ math), student types answer, submits
@@ -103,12 +105,16 @@
         n_results = 3 → list of chunk text strings
 
 6. generate_feedback
-   └─ Prompt: system context + problem + student_answer + correct_answer +
-              is_correct + retrieved_chunks (injected)
-        Ollama → "Result:" + "Explanation:" (numbered LaTeX derivation)
+   └─ The derivation is NOT written by the LLM: solution_steps were computed
+      by SymPy in step 2 (src/agent/solution_steps.py) — every displayed
+      equality symbolically verified before emission; unverifiable shapes
+      fall back to a single "expression = result" step
+   └─ Prompt (FEEDBACK_CORRECT or FEEDBACK_INCORRECT, selected by is_correct):
+      problem + student_answer + correct_answer + verified steps (context
+      only) + retrieved_chunks → Ollama → 2-3 sentence concept note
    └─ error_category is internal only: it filters retrieval (step 5) and
       accumulates in error_pattern_counts (step 7) but is never displayed
-   └─ Feedback rendered in UI with KaTeX
+   └─ UI renders: result banner + LLM concept note + verified steps (KaTeX)
 
 7. update_state
    └─ AttemptRecord created and appended to StudentState.attempt_history
@@ -142,8 +148,10 @@ class TutorState(TypedDict):
     current_topic: str
     current_subtopic: str
     current_difficulty: int          # 1–5
-    current_problem: str             # human-readable problem text
-    sympy_answer: str                # canonical answer, never exposed to UI
+    current_problem: str             # LaTeX problem text
+    sympy_expression: str            # raw computation, e.g. "Eq(2*x + 5, 11)"
+    sympy_answer: str                # canonical answer, never exposed before answering
+    solution_steps: list[str]        # SymPy-verified LaTeX derivation
     student_answer: str              # populated when student submits
 
     # Evaluation results
@@ -153,7 +161,7 @@ class TutorState(TypedDict):
     retrieved_chunks: list[str]      # top-3 chunk bodies from ChromaDB
 
     # Output
-    feedback: str                    # LLM-generated explanation
+    feedback: str                    # LLM concept note (2-3 sentences)
 
     # Persistent state (read at start, written at end of each turn)
     mastery: dict[str, float]        # {topic: 0.0–1.0}

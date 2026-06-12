@@ -70,7 +70,9 @@ def initial_tutor_state(student_id: str) -> TutorState:
         "current_subtopic": "",
         "current_difficulty": 2,
         "current_problem": "",
+        "sympy_expression": "",
         "sympy_answer": "",
+        "solution_steps": [],
         "student_answer": "",
         "evaluation": {},
         "retrieved_chunks": [],
@@ -81,14 +83,20 @@ def initial_tutor_state(student_id: str) -> TutorState:
 
 
 def feedback_to_html(text: str) -> str:
-    """Plain LLM text → HTML. Escapes everything, bolds section headers,
-    preserves line breaks. LaTeX ($...$) is left intact for KaTeX."""
+    """Plain LLM text → HTML. Escapes everything, preserves line breaks.
+    LaTeX ($...$) is left intact for KaTeX."""
     escaped = html_lib.escape(text)
-    # LLM sometimes emits markdown bold (**Result:**) — convert it
+    # LLM sometimes emits markdown bold — convert it
     escaped = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", escaped)
-    # Bold bare section headers at line start (skip ones already bolded above)
-    escaped = re.sub(r"(?m)^(Result:|Explanation:)", r"<b>\1</b>", escaped)
     return escaped.replace("\n", "<br>")
+
+
+def steps_to_html(steps: list[str]) -> str:
+    """SymPy-verified derivation steps → numbered HTML list for KaTeX."""
+    items = "".join(
+        f'<li class="py-1">{html_lib.escape(step)}</li>' for step in steps
+    )
+    return f'<ol class="list-decimal list-inside">{items}</ol>'
 
 
 @ui.page("/")
@@ -236,6 +244,16 @@ def main_page():
                         f'{feedback_to_html(fb.get("feedback", "") or "No explanation was generated.")}'
                         f"</div>"
                     )
+                    steps = fb.get("steps") or []
+                    if steps:
+                        ui.separator().classes("my-3")
+                        ui.label("Solution").classes(
+                            "text-sm font-semibold text-slate-600 mb-1"
+                        )
+                        ui.html(
+                            f'<div class="math-content text-lg text-slate-800">'
+                            f"{steps_to_html(steps)}</div>"
+                        )
 
                 ui.button("Next problem →", on_click=next_problem).classes("mt-1")
 
@@ -301,6 +319,7 @@ def main_page():
             "parse_error": evaluation.get("parse_error", False),
             "feedback": values.get("feedback", ""),
             "problem": values.get("current_problem", ""),
+            "steps": values.get("solution_steps", []),
             "student_answer": student_answer,
         }
         session["attempts"] += 1

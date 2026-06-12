@@ -9,7 +9,9 @@ class TutorState(TypedDict):
     current_subtopic: str
     current_difficulty: int
     current_problem: str
-    sympy_answer: str
+    sympy_expression: str       # the raw computation, e.g. "Eq(2*x + 5, 11)"
+    sympy_answer: str           # SymPy-computed result; never shown before answering
+    solution_steps: list[str]   # SymPy-verified LaTeX derivation, rendered verbatim
     student_answer: str
     evaluation: dict
     retrieved_chunks: list[str]

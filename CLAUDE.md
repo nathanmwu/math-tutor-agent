@@ -20,6 +20,7 @@ The system is not trying to be production-scale. It is trying to be *correct*, *
 | **Adaptive behavior** | `src/agent/nodes.py:adapt_next` + `src/state/` | Student mastery tracked per topic via EMA; difficulty and topic selection adjust each turn |
 | **Persistent student state** | `src/state/models.py` + `data/students/` | Pydantic models serialized to per-student JSON; survives session restarts |
 | **Symbolic answer verification** | `src/agent/nodes.py:evaluate_answer` via SymPy | Deterministic math evaluation — right/wrong is never delegated to an LLM |
+| **Verified solution steps** | `src/agent/solution_steps.py` | The displayed derivation is SymPy-generated; every emitted equality is symbolically checked before display. The LLM only writes a short concept note |
 | **Structured LLM output** | `src/agent/prompts.py` + `nodes.py:_parse_problem_json` | Problem generation returns validated JSON (`problem_text` in LaTeX, `sympy_expression`, `topic`, `subtopic`); a repair layer fixes LaTeX-in-JSON escaping corruption |
 
 ---
@@ -38,8 +39,9 @@ LangGraph StateGraph (TutorState)
     ├── evaluate_answer    → SymPy symbolic check (deterministic)
     │                         + Ollama error categorization (wrong only, internal)
     ├── retrieve_explanation → ChromaDB RAG (problem text as semantic query)
-    ├── generate_feedback  → Ollama with retrieved chunks; Result + step-by-step
-    │                         LaTeX Explanation (error category never displayed)
+    ├── generate_feedback  → Ollama with retrieved chunks; 2-3 sentence concept
+    │                         note only — the derivation comes from solution_steps
+    │                         (SymPy-verified, computed in generate_problem)
     ├── update_state       → EMA mastery update + write JSON
     └── adapt_next         → sets next difficulty/topic → END
                               UI shows feedback; "Next problem" triggers a new turn from load_state
@@ -116,6 +118,7 @@ Tutor-Agent/
     ├── agent/
     │   ├── graph.py        # StateGraph definition
     │   ├── nodes.py        # all node functions
+    │   ├── solution_steps.py  # SymPy-verified derivations
     │   └── prompts.py      # all prompt templates
     └── ui/
         └── app.py          # NiceGUI app (KaTeX rendering, live op feed)
@@ -131,5 +134,6 @@ Tutor-Agent/
 - SymPy evaluation lives in `src/agent/nodes.py:symbolic_check()` — keep it isolated so it's easy to swap or extend.
 - Knowledge base source files in `data/knowledge_base/` are the source of truth — re-run `ingest_kb.py` if ChromaDB is deleted.
 - The UI (`src/ui/app.py`) only touches `src/agent/graph.py` — never import nodes, store, or retriever from the UI.
-- All math shown to the student is LaTeX wrapped in `$...$` — problems are pure notation (no word problems); feedback is `Result:` + `Explanation:` only, the error category is never displayed.
+- All math shown to the student is LaTeX wrapped in `$...$` — problems are pure notation (no word problems); the error category is never displayed.
+- Solution derivations are SymPy-generated (`src/agent/solution_steps.py`) and rendered verbatim — the LLM never writes math steps. Every displayed equality must pass symbolic verification before it is emitted; unverifiable shapes fall back to a single `expression = result` step.
 - The UI must stay responsive during LLM calls: consume `graph.stream` via `run.io_bound` chunk-by-chunk, never block the event loop.

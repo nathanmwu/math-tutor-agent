@@ -12,9 +12,11 @@ from sympy import Eq, simplify, solve, sympify
 from src.agent.state import TutorState
 from src.agent.prompts import (
     CATEGORIZE_ERROR_PROMPT,
-    GENERATE_FEEDBACK_PROMPT,
+    FEEDBACK_CORRECT_PROMPT,
+    FEEDBACK_INCORRECT_PROMPT,
     GENERATE_PROBLEM_PROMPT,
 )
+from src.agent.solution_steps import generate_solution_steps
 from src.knowledge.retriever import retrieve_content
 from src.state import store
 
@@ -160,6 +162,7 @@ def generate_problem_node(state: TutorState) -> dict:
 
     problem_text = None
     sympy_answer = None
+    sympy_expression = None
 
     for _ in range(3):
         response = llm.invoke(prompt)
@@ -195,10 +198,13 @@ def generate_problem_node(state: TutorState) -> dict:
                     if len(computed) != 1:
                         continue
                     computed = computed[0]
-                if computed.free_symbols:
-                    continue  # still symbolic, retry
+                # must be a concrete number — rejects leftover symbols AND
+                # booleans (an Eq of two constants evaluates to True/False)
+                if not getattr(computed, "is_number", False):
+                    continue
                 problem_text = pt
                 sympy_answer = str(computed)
+                sympy_expression = expr_str
                 break
         except Exception:
             continue
@@ -206,10 +212,13 @@ def generate_problem_node(state: TutorState) -> dict:
     if problem_text is None or sympy_answer is None:
         problem_text = "$2 + 2 =$"
         sympy_answer = "4"
+        sympy_expression = "2 + 2"
 
     return {
         "current_problem": problem_text,
         "sympy_answer": sympy_answer,
+        "sympy_expression": sympy_expression,
+        "solution_steps": generate_solution_steps(sympy_expression),
         "student_answer": "",
         "evaluation": {},
         "retrieved_chunks": [],
@@ -278,13 +287,19 @@ def generate_feedback_node(state: TutorState) -> dict:
     evaluation = state.get("evaluation", {})
     chunks = state.get("retrieved_chunks", [])
     retrieved_content = "\n---\n".join(chunks) if chunks else ""
+    steps = state.get("solution_steps", [])
 
+    template = (
+        FEEDBACK_CORRECT_PROMPT
+        if evaluation.get("is_correct", False)
+        else FEEDBACK_INCORRECT_PROMPT
+    )
     llm = ChatOllama(model=os.getenv("OLLAMA_MODEL", "llama3:8b"), temperature=0.7)
-    prompt = GENERATE_FEEDBACK_PROMPT.format(
+    prompt = template.format(
         problem=state["current_problem"],
         student_answer=state["student_answer"],
         correct_answer=state["sympy_answer"],
-        is_correct=evaluation.get("is_correct", False),
+        solution_steps="\n".join(steps) if steps else "(not available)",
         retrieved_content=retrieved_content,
     )
     response = llm.invoke(prompt)

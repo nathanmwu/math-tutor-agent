@@ -29,7 +29,9 @@ def _bootstrap(config) -> TutorState:
         "current_subtopic": "",
         "current_difficulty": 2,
         "current_problem": "",
+        "sympy_expression": "",
         "sympy_answer": "",
+        "solution_steps": [],
         "student_answer": "",
         "evaluation": {},
         "retrieved_chunks": [],
@@ -39,6 +41,8 @@ def _bootstrap(config) -> TutorState:
     }
     for chunk in graph.stream(initial, config=config, stream_mode="updates"):
         node = list(chunk.keys())[0]
+        if node.startswith("__"):
+            continue
         print(f"  node: {node}  ->  {list(chunk[node].keys())}")
     return graph.get_state(config).values
 
@@ -56,6 +60,14 @@ def test_bootstrap_produces_problem():
 
     assert state.get("current_problem"), "No problem was generated"
     assert state.get("sympy_answer"), "sympy_answer is empty after bootstrap"
+    steps = state.get("solution_steps", [])
+    assert steps, "solution_steps is empty after bootstrap"
+    # the derivation must end at the verified answer
+    from sympy import latex, simplify, sympify
+    answer_latex = latex(simplify(sympify(state["sympy_answer"], rational=True)))
+    assert answer_latex in steps[-1], (
+        f"final step {steps[-1]!r} does not contain the answer {answer_latex!r}"
+    )
 
 
 def test_sympy_answer_is_numeric():

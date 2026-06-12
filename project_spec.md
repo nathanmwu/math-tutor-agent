@@ -24,11 +24,12 @@ An adaptive K-12 math tutoring agent that presents problems, evaluates student a
 - For wrong answers, the system must additionally classify the error into a category (e.g., `sign_error`, `wrong_operation`, `arithmetic_mistake`, `conceptual_error`). This classification is **internal only**: it sharpens knowledge-base retrieval and accumulates in per-topic error statistics, but is never displayed to the student.
 - Unparseable student input (non-numeric, ambiguous) must surface a clear parse-error message, not silently mark wrong.
 
-### FR-3: Retrieval-Augmented Feedback
-- After every answer evaluation — correct or incorrect — the system must retrieve relevant content from the knowledge base (concept explanations, worked examples, or misconception notes) and generate an explanation.
+### FR-3: Retrieval-Augmented Feedback with Verified Derivations
+- After every answer evaluation — correct or incorrect — the system must show: a result banner, a short LLM concept note, and the full solution derivation.
+- **The derivation must be computed symbolically (SymPy), never written by an LLM.** Every displayed equality must pass symbolic verification before it is shown; inputs that cannot be derived granularly fall back to a single verified `expression = result` step. Wrong math in an explanation must be structurally impossible.
+- The LLM concept note (2–3 sentences) must be generated from a prompt that injects retrieved knowledge-base content — the LLM must not explain from parametric memory alone, must not perform arithmetic, and must not emit meta-commentary about formatting or sections. Separate prompts are used for correct and incorrect answers.
 - Retrieval must filter by `topic`, `subtopic`, and optionally `misconception_tag` to return targeted content.
-- Retrieved chunks must be injected into the feedback generation prompt — the LLM must not generate explanations from parametric memory alone.
-- The explanation must follow a two-section structure: `Result:` (correct/incorrect plus the correct answer) and `Explanation:` (a numbered, step-by-step derivation in the style of a mathematical paper, with all math in `$...$` LaTeX).
+- All math in the note and derivation must be `$...$` LaTeX, typeset in the UI.
 
 ### FR-4: Student State
 - The system must persist student state across sessions in `data/students/{student_id}.json`.
