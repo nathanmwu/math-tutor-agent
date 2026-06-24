@@ -11,7 +11,58 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pytest
 from sympy import simplify
 
-from src.agent.solution_steps import generate_solution_steps
+from src.agent.solution_steps import (
+    generate_solution_steps,
+    linear_eval_solution_steps,
+    slope_solution_steps,
+)
+
+
+# ── Linear relationships: slope ──────────────────────────────────────────────
+
+def test_slope_negative_coordinates_reported_case():
+    # The exact problem that previously produced a wrong stored answer (3/7):
+    # the derivation must show the substitution and reduce to -5/7.
+    steps = slope_solution_steps((-2, 4), (5, -1))
+    assert len(steps) == 1
+    step = steps[0]
+    assert r"\frac{y_2 - y_1}{x_2 - x_1}" in step      # formula shown
+    assert r"\frac{-1 - 4}{5 - (-2)}" in step          # substitution, signs intact
+    assert step.endswith(r"-\frac{5}{7}$")             # reduced answer
+
+
+def test_slope_integer_result_shows_reduction():
+    steps = slope_solution_steps((0, 0), (2, 6))
+    assert r"\frac{6 - 0}{2 - 0}" in steps[0]
+    assert r"\frac{6}{2}" in steps[0]
+    assert steps[0].endswith("= 3$")
+
+
+def test_slope_already_reduced_omits_trailing_step():
+    # 9/3 reduces to 3 (shown), but a slope already in lowest terms must not
+    # append a redundant identical step.
+    steps = slope_solution_steps((1, 2), (4, 5))   # (5-2)/(4-1) = 3/3 -> 1
+    assert steps[0].endswith("= 1$")
+    steps = slope_solution_steps((1, 1), (3, 2))   # (2-1)/(3-1) = 1/2, already reduced
+    assert steps[0].count("=") == 3                # formula = sub = raw  (no extra)
+    assert steps[0].endswith(r"\frac{1}{2}$")
+
+
+def test_slope_vertical_line_raises():
+    with pytest.raises(Exception):
+        slope_solution_steps((3, 1), (3, 9))       # undefined slope
+
+
+# ── Linear relationships: evaluate y ─────────────────────────────────────────
+
+def test_linear_eval_basic():
+    steps = linear_eval_solution_steps(2, 1, 3)
+    assert steps == ["$y = 2x + 1 = 2(3) + 1 = 6 + 1 = 7$"]
+
+
+def test_linear_eval_unit_and_negative_coefficients():
+    steps = linear_eval_solution_steps(-1, -3, 4)
+    assert steps == ["$y = -x - 3 = -1(4) - 3 = -4 - 3 = -7$"]
 
 
 # ── Linear equations ──────────────────────────────────────────────────────────

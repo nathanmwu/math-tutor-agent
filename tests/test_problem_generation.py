@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langchain_ollama import ChatOllama
-from src.agent.nodes import _parse_problem_json
+from src.agent.nodes import _build_linear_relationship_problem, _parse_problem_json
 from src.agent.prompts import build_generate_problem_prompt
 
 
@@ -139,6 +139,44 @@ def _evaluate_expression(expr_str):
             raise ValueError(f"solve() returned {len(result)} solutions: {result}")
         result = result[0]
     return result
+
+
+# ── Deterministic linear_relationships generation (no LLM required) ───────────
+
+def _slope_from_prose(problem_text):
+    """Recover the two points from a slope problem's prose and compute the slope.
+    Returns None for the non-slope (evaluate-y) form."""
+    m = re.search(r"\((-?\d+),\s*(-?\d+)\).*?\((-?\d+),\s*(-?\d+)\)", problem_text)
+    if not m:
+        return None
+    from sympy import Rational
+    a, b, c, d = map(int, m.groups())
+    return Rational(d - b, c - a)
+
+
+def test_linear_relationship_answer_never_drifts_from_prose():
+    """The stored answer must always match the slope computed from the displayed
+    points — the regression that produced 3/7 for points (-2,4),(5,-1)."""
+    seen = set()
+    checked_slopes = 0
+    for difficulty in range(1, 6):
+        for _ in range(60):
+            built = _build_linear_relationship_problem(difficulty, seen)
+            assert built is not None
+            seen.add(built["current_problem"])
+            stored = sympify(built["sympy_answer"], rational=True)
+            assert stored.is_number
+            from_prose = _slope_from_prose(built["current_problem"])
+            if from_prose is not None:
+                checked_slopes += 1
+                assert from_prose == stored, (
+                    f"drift: prose says {from_prose} but stored answer is {stored} "
+                    f"for {built['current_problem']!r}"
+                )
+            # the derivation must be present and end in a verified equality
+            assert built["solution_steps"]
+            assert built["solution_steps"][0].startswith(("$m =", "$y ="))
+    assert checked_slopes > 0, "no slope-form problems were generated to check"
 
 
 @pytest.mark.parametrize("topic,subtopic,difficulty", CASES)

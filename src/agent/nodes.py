@@ -17,7 +17,11 @@ from src.agent.prompts import (
     FEEDBACK_INCORRECT_PROMPT,
     build_generate_problem_prompt,
 )
-from src.agent.solution_steps import generate_solution_steps
+from src.agent.solution_steps import (
+    generate_solution_steps,
+    linear_eval_solution_steps,
+    slope_solution_steps,
+)
 from src.knowledge.retriever import retrieve_content
 from src.state import store
 
@@ -157,16 +161,83 @@ def select_topic_node(state: TutorState) -> dict:
     }
 
 
+def _coef(m: int) -> str:
+    """Coefficient as it should appear before x: '', '-', or the number."""
+    if m == 1:
+        return ""
+    if m == -1:
+        return "-"
+    return str(m)
+
+
+def _build_linear_relationship_problem(difficulty: int, seen_problems: set[str]) -> dict | None:
+    """Deterministically build a ``linear_relationships`` problem.
+
+    Both ``problem_text`` and the answer derive from one set of integers, so the
+    prose and the computed answer cannot drift — the failure mode that produced
+    wrong slope answers (e.g. ``3/7`` for points $(-2,4),(5,-1)$) when the LLM
+    authored the prose and the arithmetic expression independently. The matching
+    derivation is built by the verified slope / linear-eval step builders.
+    """
+    span = 4 + 2 * difficulty  # coordinate magnitude grows with difficulty
+
+    for _ in range(50):
+        if random.random() < 0.5:
+            # Form A: slope through two points
+            a, c = random.randint(-span, span), random.randint(-span, span)
+            if a == c:  # vertical line — slope undefined
+                continue
+            if c < a:  # keep x2 > x1 so the denominator stays positive
+                a, c = c, a
+            b, d = random.randint(-span, span), random.randint(-span, span)
+            problem_text = rf"Find the slope of the line through $({a}, {b})$ and $({c}, {d})$"
+            sympy_expression = f"Rational({d} - {b}, {c} - {a})"
+            steps = slope_solution_steps((a, b), (c, d))
+        else:
+            # Form B: evaluate y = m x + k at x = v
+            m = random.choice([n for n in range(-5, 6) if n != 0])
+            k = random.choice([n for n in range(-9, 10) if n != 0])
+            v = random.randint(-span, span)
+            sign = "+" if k > 0 else "-"
+            problem_text = (
+                rf"If $y = {_coef(m)}x {sign} {abs(k)}$, find $y$ when $x = {v}$"
+            )
+            sympy_expression = f"{m}*{v} + {k}"
+            steps = linear_eval_solution_steps(m, k, v)
+
+        if problem_text in seen_problems:
+            continue
+        return {
+            "current_problem": problem_text,
+            "sympy_answer": str(sympify(sympy_expression, rational=True)),
+            "sympy_expression": sympy_expression,
+            "solution_steps": steps,
+            "student_answer": "",
+            "evaluation": {},
+            "retrieved_chunks": [],
+            "feedback": "",
+        }
+    return None
+
+
 def generate_problem_node(state: TutorState) -> dict:
+    history = state.get("session_history", [])
+    seen_problems = {item.get("problem_text", "") for item in history}
+
+    # linear_relationships is generated deterministically (no LLM): the prose and
+    # the answer must come from one source of truth, never drift apart.
+    if state["current_subtopic"] == "linear_relationships":
+        built = _build_linear_relationship_problem(state["current_difficulty"], seen_problems)
+        if built is not None:
+            return built
+
     llm = ChatOllama(model=os.getenv("OLLAMA_MODEL", "llama3:8b"), temperature=0.7)
 
-    history = state.get("session_history", [])
     recent = history[-5:] if len(history) >= 5 else history
     recent_problems = (
         "; ".join(item.get("problem_text", item.get("topic", "")) for item in recent)
         if recent else "none"
     )
-    seen_problems = {item.get("problem_text", "") for item in history}
 
     prompt = build_generate_problem_prompt(
         topic=state["current_topic"],

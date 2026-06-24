@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from sympy import Eq, Integer, Mul, Pow, Rational, lcm, latex, simplify, solve, sympify
 
-__all__ = ["generate_solution_steps"]
+__all__ = [
+    "generate_solution_steps",
+    "slope_solution_steps",
+    "linear_eval_solution_steps",
+]
 
 
 class _StepCheckError(Exception):
@@ -104,6 +108,64 @@ def _linear_equation_steps(eq: Eq) -> list[str]:
             steps.append(f"${latex(x)} = {division} = {latex(solution)}$")
 
     return steps
+
+
+# ── Linear relationships (slope, evaluate y) ─────────────────────────────────
+
+def _signed_sub(minuend: Integer, subtrahend: Integer) -> str:
+    """LaTeX for 'minuend - subtrahend', parenthesizing a negative subtrahend
+    so the substitution reads '5 - (-2)' rather than the ambiguous '5 - -2'."""
+    if subtrahend < 0:
+        return rf"{latex(minuend)} - ({latex(subtrahend)})"
+    return rf"{latex(minuend)} - {latex(subtrahend)}"
+
+
+def slope_solution_steps(p1: tuple[int, int], p2: tuple[int, int]) -> list[str]:
+    """Worked derivation for the slope through two points; every equality verified.
+
+    Renders the formula, the substitution, the raw fraction, and the reduced
+    value:  m = (y2 - y1)/(x2 - x1) = (d - b)/(c - a) = num/den = reduced.
+    """
+    (a, b), (c, d) = p1, p2
+    a, b, c, d = Integer(a), Integer(b), Integer(c), Integer(d)
+    num_raw, den_raw = d - b, c - a
+    if den_raw == 0:
+        raise _StepCheckError("vertical line — slope undefined")
+    slope = Rational(num_raw, den_raw)
+
+    substituted = rf"\frac{{{_signed_sub(d, b)}}}{{{_signed_sub(c, a)}}}"
+    raw = _frac(num_raw, den_raw)
+    reduced = _rational_latex(slope)
+
+    pairs = [(substituted, slope), (raw, slope)]
+    if raw != reduced:  # skip the trailing step when already in lowest terms
+        pairs.append((reduced, slope))
+    body = _verified_chain(*pairs).strip("$")
+    return [rf"$m = \frac{{y_2 - y_1}}{{x_2 - x_1}} = {body}$"]
+
+
+def linear_eval_solution_steps(m: int, k: int, v: int) -> list[str]:
+    """Worked derivation for y = m·x + k evaluated at x = v; every equality verified.
+
+    Renders  y = m x + k = m(v) + k = product + k = answer.
+    """
+    m, k, v = Integer(m), Integer(k), Integer(v)
+    answer = m * v + k
+
+    def _plus(term: Integer) -> str:
+        return rf"+ {latex(term)}" if term >= 0 else rf"- {latex(abs(term))}"
+
+    coef = "" if m == 1 else "-" if m == -1 else latex(m)
+    formula = rf"{coef}x {_plus(k)}"
+    substituted = rf"{latex(m)}({latex(v)}) {_plus(k)}"
+    arithmetic = rf"{latex(m * v)} {_plus(k)}"
+
+    body = _verified_chain(
+        (substituted, answer),
+        (arithmetic, answer),
+        (latex(answer), answer),
+    ).strip("$")
+    return [rf"$y = {formula} = {body}$"]
 
 
 # ── Fraction arithmetic ───────────────────────────────────────────────────────
