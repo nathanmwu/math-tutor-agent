@@ -17,4 +17,7 @@ class TutorState(TypedDict):
     retrieved_chunks: list[str]
     feedback: str
     mastery: dict[str, float]
+    # Per-subtopic mastery summary for the UI focus-areas panel, keyed by
+    # subtopic_key(topic, subtopic) -> {"topic", "subtopic", "mastery_score"}.
+    subtopic_mastery: dict[str, dict]
     session_history: list[dict]

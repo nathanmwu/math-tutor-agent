@@ -15,6 +15,7 @@ from src.agent.prompts import (
     CATEGORIZE_ERROR_PROMPT,
     FEEDBACK_CORRECT_PROMPT,
     FEEDBACK_INCORRECT_PROMPT,
+    SUBTOPIC_VARIANTS,
     build_generate_problem_prompt,
 )
 from src.agent.solution_steps import (
@@ -24,6 +25,14 @@ from src.agent.solution_steps import (
 )
 from src.knowledge.retriever import retrieve_content
 from src.state import store
+from src.state.models import SubtopicMastery, subtopic_key
+
+# Fraction of turns that ignore weakness-priority and pick a subtopic uniformly,
+# preserving coverage/variety so the agent never tunnels into one weak subtopic.
+EXPLORATION_FRACTION = 0.25
+# Probability of preferring a never-attempted subtopic during cold start, so
+# breadth is guaranteed before weakness-weighting takes over.
+COLD_START_FRACTION = 0.6
 
 CURRICULUM_ORDER = ["fractions_ratios", "algebra"]
 
@@ -114,45 +123,67 @@ def symbolic_check(student_input: str, sympy_answer: str) -> bool | None:
         return None
 
 
+def _subtopic_mastery_summary(student) -> dict[str, dict]:
+    """Compact per-subtopic mastery view passed through TutorState to the UI."""
+    return {
+        key: {
+            "topic": sm.topic,
+            "subtopic": sm.subtopic,
+            "mastery_score": sm.mastery_score,
+        }
+        for key, sm in student.subtopic_mastery.items()
+    }
+
+
 def load_state_node(state: TutorState) -> dict:
     student = store.load_student(state["student_id"], STUDENT_STATE_DIR)
     mastery = {topic: tm.mastery_score for topic, tm in student.topic_mastery.items()}
-    return {"mastery": mastery}
+    return {
+        "mastery": mastery,
+        "subtopic_mastery": _subtopic_mastery_summary(student),
+    }
+
+
+def _subtopic_priority(sm: SubtopicMastery) -> float:
+    """Selection weight: higher = weaker = practice more.
+
+    Combines low mastery with a recent-error boost. The floor keeps every
+    subtopic reachable (a zero weight would make it unselectable).
+    """
+    weakness = 1.0 - sm.mastery_score
+    error_rate = min(sum(sm.error_pattern_counts.values()) / max(sm.attempts, 1), 1.0)
+    return max(0.05, weakness + 0.5 * error_rate)
 
 
 def select_topic_node(state: TutorState) -> dict:
-    mastery = state.get("mastery", {})
+    """Pick a (topic, subtopic) pair, favoring the student's weak subtopics.
 
-    if random.random() < 0.7:
-        topic = min(
-            CURRICULUM_ORDER,
-            key=lambda t: mastery.get(t, 0.0),
-        )
-    else:
-        topic = random.choice(CURRICULUM_ORDER)
-
+    Weighted-random over a transparent per-subtopic priority score, with a
+    cold-start path that guarantees breadth and an exploration fraction that
+    preserves variety so the agent never tunnels into one subtopic.
+    """
     student = store.load_student(state["student_id"], STUDENT_STATE_DIR)
-    tm = student.topic_mastery.get(topic)
+    candidates = [(t, st) for t in CURRICULUM_ORDER for st in SUBTOPICS[t]]
 
-    subtopics = SUBTOPICS[topic]
-    subtopic = None
-    if tm is not None:
-        attempted_counts: dict[str, int] = {}
-        for record in student.attempt_history:
-            if record.topic == topic:
-                attempted_counts[record.subtopic] = attempted_counts.get(record.subtopic, 0) + 1
-        for st in subtopics:
-            if attempted_counts.get(st, 0) < 3:
-                subtopic = st
-                break
+    never = [
+        (t, st) for (t, st) in candidates if subtopic_key(t, st) not in student.subtopic_mastery
+    ]
 
-    if subtopic is None:
-        subtopic = random.choice(subtopics)
-
-    if tm is not None:
-        difficulty = tm.current_difficulty
+    if never and random.random() < COLD_START_FRACTION:
+        topic, subtopic = random.choice(never)
+    elif random.random() < EXPLORATION_FRACTION:
+        topic, subtopic = random.choice(candidates)
     else:
-        difficulty = 2
+        weights = [
+            _subtopic_priority(student.subtopic_mastery[subtopic_key(t, st)])
+            if subtopic_key(t, st) in student.subtopic_mastery
+            else 1.0
+            for (t, st) in candidates
+        ]
+        topic, subtopic = random.choices(candidates, weights=weights, k=1)[0]
+
+    sm = student.subtopic_mastery.get(subtopic_key(topic, subtopic))
+    difficulty = sm.current_difficulty if sm is not None else 2
 
     return {
         "current_topic": topic,
@@ -170,7 +201,9 @@ def _coef(m: int) -> str:
     return str(m)
 
 
-def _build_linear_relationship_problem(difficulty: int, seen_problems: set[str]) -> dict | None:
+def _build_linear_relationship_problem(
+    difficulty: int, seen_problems: set[str], avoid_signatures: set[str] | None = None
+) -> dict | None:
     """Deterministically build a ``linear_relationships`` problem.
 
     Both ``problem_text`` and the answer derive from one set of integers, so the
@@ -207,6 +240,8 @@ def _build_linear_relationship_problem(difficulty: int, seen_problems: set[str])
 
         if problem_text in seen_problems:
             continue
+        if avoid_signatures and store.problem_signature(problem_text) in avoid_signatures:
+            continue
         return {
             "current_problem": problem_text,
             "sympy_answer": str(sympify(sympy_expression, rational=True)),
@@ -224,10 +259,17 @@ def generate_problem_node(state: TutorState) -> dict:
     history = state.get("session_history", [])
     seen_problems = {item.get("problem_text", "") for item in history}
 
+    # Persisted cross-session avoid-list of problem SHAPES for this subtopic.
+    student = store.load_student(state["student_id"], STUDENT_STATE_DIR)
+    key = subtopic_key(state["current_topic"], state["current_subtopic"])
+    persisted_signatures = student.recent_signatures.get(key, [])
+
     # linear_relationships is generated deterministically (no LLM): the prose and
     # the answer must come from one source of truth, never drift apart.
     if state["current_subtopic"] == "linear_relationships":
-        built = _build_linear_relationship_problem(state["current_difficulty"], seen_problems)
+        built = _build_linear_relationship_problem(
+            state["current_difficulty"], seen_problems, set(persisted_signatures)
+        )
         if built is not None:
             return built
 
@@ -239,11 +281,18 @@ def generate_problem_node(state: TutorState) -> dict:
         if recent else "none"
     )
 
+    # Rotate problem shape and pass the structural avoid-list to the generator.
+    variants = SUBTOPIC_VARIANTS.get(state["current_subtopic"])
+    variant_hint = random.choice(variants) if variants else "any valid form"
+    avoid_signatures = "; ".join(persisted_signatures[-5:]) if persisted_signatures else "none"
+
     prompt = build_generate_problem_prompt(
         topic=state["current_topic"],
         subtopic=state["current_subtopic"],
         difficulty=state["current_difficulty"],
         recent_problems=recent_problems,
+        variant_hint=variant_hint,
+        avoid_signatures=avoid_signatures,
     )
 
     problem_text = None
@@ -431,16 +480,15 @@ def update_state_node(state: TutorState) -> dict:
         }
     )
 
-    return {"mastery": mastery, "session_history": history}
+    return {
+        "mastery": mastery,
+        "subtopic_mastery": _subtopic_mastery_summary(student),
+        "session_history": history,
+    }
 
 
 def adapt_next_node(state: TutorState) -> dict:
-    student = store.load_student(state["student_id"], STUDENT_STATE_DIR)
-    tm = student.topic_mastery.get(state["current_topic"])
-
-    if tm is not None:
-        new_difficulty = tm.current_difficulty
-    else:
-        new_difficulty = state.get("current_difficulty", 2)
-
-    return {"current_difficulty": new_difficulty}
+    # Difficulty is now per-subtopic and authoritative: every "Next problem"
+    # re-enters the graph at load_state -> select_topic, which recomputes
+    # difficulty from the freshly-saved subtopic mastery. Nothing to adjust here.
+    return {"current_difficulty": state.get("current_difficulty", 2)}

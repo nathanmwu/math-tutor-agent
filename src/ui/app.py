@@ -31,6 +31,17 @@ TOPIC_LABELS = {
     "algebra": "Algebra",
 }
 
+SUBTOPIC_LABELS = {
+    "equivalent_fractions": "Equivalent fractions",
+    "addition_subtraction": "Adding & subtracting fractions",
+    "multiplication_division": "Multiplying & dividing fractions",
+    "proportions": "Proportions",
+    "percentages": "Percentages",
+    "linear_equations": "Linear equations",
+    "evaluating_expressions": "Evaluating expressions",
+    "linear_relationships": "Linear relationships",
+}
+
 DIFFICULTY_LABELS = {1: "Intro", 2: "Easy", 3: "Medium", 4: "Hard", 5: "Challenge"}
 
 # KaTeX typesetting, scoped strictly to .math-content containers (ui.html
@@ -100,6 +111,7 @@ def initial_tutor_state(student_id: str) -> TutorState:
         "retrieved_chunks": [],
         "feedback": "",
         "mastery": {},
+        "subtopic_mastery": {},
         "session_history": [],
     }
 
@@ -167,6 +179,28 @@ def main_page():
                 ui.linear_progress(value=round(score, 2), show_value=False).classes(
                     "w-full"
                 ).props("rounded size=8px")
+
+            # Focus areas — the student's weakest subtopics, so the adaptive
+            # targeting is visible. Error categories are deliberately never shown.
+            subtopic_mastery = (
+                graph_values().get("subtopic_mastery", {}) if session["config"] else {}
+            )
+            if subtopic_mastery:
+                weakest = sorted(
+                    subtopic_mastery.values(), key=lambda s: s.get("mastery_score", 0.0)
+                )[:3]
+                ui.separator().classes("my-2")
+                ui.label("Focus areas").classes("text-sm font-semibold text-slate-600")
+                ui.label("Where you're getting extra practice").classes(
+                    "text-xs text-slate-400"
+                )
+                for s in weakest:
+                    label = SUBTOPIC_LABELS.get(s.get("subtopic", ""), s.get("subtopic", ""))
+                    with ui.row().classes("w-full items-center justify-between mt-1"):
+                        ui.label(label).classes("text-sm text-slate-700")
+                        ui.label(f"{s.get('mastery_score', 0.0):.0%}").classes(
+                            "text-xs text-slate-400"
+                        )
 
     # ── Main area ─────────────────────────────────────────────────────────────
     @ui.refreshable

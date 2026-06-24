@@ -75,12 +75,66 @@ _DEFAULT_SPEC = (
     'and give a sympy_expression (using Rational(a,b) for fractions) that evaluates to a concrete number.'
 )
 
+# Rotating "shape" hints injected into the generation prompt so the LLM varies
+# the STRUCTURE of problems (not just the numbers) within a subtopic. One hint is
+# chosen per generation. linear_relationships is generated deterministically and
+# is intentionally absent.
+SUBTOPIC_VARIANTS: dict[str, list[str]] = {
+    "equivalent_fractions": [
+        "a fraction whose numerator and denominator share a small common factor",
+        "a fraction that reduces by a factor of 3 or more",
+        "a larger fraction (two-digit numerator and denominator) that reduces",
+    ],
+    "addition_subtraction": [
+        "two fractions with unlike denominators, added",
+        "two fractions with unlike denominators, subtracted",
+        "three fractions with unlike denominators",
+    ],
+    "multiplication_division": [
+        "a product of two proper fractions",
+        "a quotient of two proper fractions",
+        "a product or quotient where one fraction is greater than 1",
+    ],
+    "proportions": [
+        "the unknown x in the numerator on the right",
+        "the unknown x in the denominator on the right",
+        "the unknown x on the left side of the proportion",
+    ],
+    "percentages": [
+        "Template A: finding a percent of a number",
+        "Template B: finding what percent one number is of another",
+    ],
+    "linear_equations": [
+        "a two-step equation like ax + b = c",
+        "an equation with the variable on both sides, like ax + b = cx + d",
+        "an equation with parentheses, like a(bx + c) = d",
+    ],
+    "evaluating_expressions": [
+        "a linear expression to evaluate",
+        "a quadratic expression to evaluate",
+        "an expression with a negative substitution value",
+    ],
+}
+
+# Per-difficulty number-range guidance. Makes the difficulty ramp actually feel
+# harder. The is_number SymPy gate still guarantees answer correctness.
+DIFFICULTY_RANGE_GUIDANCE: dict[int, str] = {
+    1: "Use small single-digit numbers; keep the arithmetic very simple.",
+    2: "Use small single-digit numbers.",
+    3: "Use numbers up to about 20.",
+    4: "Use two-digit numbers and/or an extra term.",
+    5: "Use two-digit numbers and the most involved form of this subtopic.",
+}
+
 GENERATE_PROBLEM_PROMPT = """You are a K-12 math problem generator. Generate ONE problem of a specific kind.
 
 Topic: {topic}
 Subtopic: {subtopic}
 Difficulty (1=easiest, 5=hardest): {difficulty}
+Number guidance for this difficulty: {difficulty_guidance}
 Recent problems (avoid repeating the same numbers): {recent_problems}
+Vary the problem shape — make this one: {variant_hint}
+Avoid problems structurally identical to these (same shape, ignore the exact numbers): {avoid_signatures}
 
 You MUST produce a problem of EXACTLY the subtopic "{subtopic}", following this specification precisely:
 {subtopic_spec}
@@ -96,14 +150,22 @@ Output only the JSON object."""
 
 
 def build_generate_problem_prompt(
-    topic: str, subtopic: str, difficulty: int, recent_problems: str
+    topic: str,
+    subtopic: str,
+    difficulty: int,
+    recent_problems: str,
+    variant_hint: str = "any valid form",
+    avoid_signatures: str = "none",
 ) -> str:
     """Fill GENERATE_PROBLEM_PROMPT with the spec for the requested subtopic only."""
     return GENERATE_PROBLEM_PROMPT.format(
         topic=topic,
         subtopic=subtopic,
         difficulty=difficulty,
+        difficulty_guidance=DIFFICULTY_RANGE_GUIDANCE.get(difficulty, ""),
         recent_problems=recent_problems,
+        variant_hint=variant_hint,
+        avoid_signatures=avoid_signatures,
         subtopic_spec=SUBTOPIC_SPEC.get(subtopic, _DEFAULT_SPEC),
     )
 
