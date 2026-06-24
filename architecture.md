@@ -274,7 +274,7 @@ With probability 0.30:
     If all topics have been attempted, fall back to exploitation
 
 On first session (no state):
-    Start with topic[0] in curriculum order: fractions → ratios → algebra → geometry
+    Start with topic[0] in curriculum order: fractions_ratios → algebra
 ```
 
 ### Difficulty Adaptation

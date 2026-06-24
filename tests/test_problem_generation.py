@@ -23,31 +23,27 @@ load_dotenv()
 
 from langchain_ollama import ChatOllama
 from src.agent.nodes import _parse_problem_json
-from src.agent.prompts import GENERATE_PROBLEM_PROMPT
+from src.agent.prompts import build_generate_problem_prompt
 
 
 MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 REQUIRED_FIELDS = {"problem_text", "sympy_expression", "topic", "subtopic", "difficulty"}
 
 CASES = [
-    ("fractions",  "addition_subtraction",   2),
-    ("fractions",  "multiplication_division", 2),
-    ("algebra",    "linear_equations",        2),
-    ("algebra",    "linear_equations",        3),
-    ("ratios",     "unit_rates",              2),
-    ("geometry",   "area_perimeter",          2),
+    ("fractions_ratios", "addition_subtraction",    2),
+    ("fractions_ratios", "multiplication_division", 2),
+    ("fractions_ratios", "proportions",             2),
+    ("fractions_ratios", "percentages",             2),
+    ("algebra",          "linear_equations",        3),
+    ("algebra",          "evaluating_expressions",  2),
+    ("algebra",          "linear_relationships",    3),
 ]
 
 
 def _call_llm(topic, subtopic, difficulty):
     """Call generate prompt once, return raw text."""
     llm = ChatOllama(model=MODEL, temperature=0.0)  # temp=0 for determinism
-    prompt = GENERATE_PROBLEM_PROMPT.format(
-        topic=topic,
-        subtopic=subtopic,
-        difficulty=difficulty,
-        recent_problems="none",
-    )
+    prompt = build_generate_problem_prompt(topic, subtopic, difficulty, "none")
     return llm.invoke(prompt).content.strip()
 
 
@@ -89,6 +85,21 @@ def test_parse_single_escaped_neq():
     raw = '{"problem_text": "$a \\neq b$"}'
     data = _parse_problem_json(raw)
     assert data["problem_text"] == "$a \\neq b$"
+
+
+def test_parse_doubled_escaped_percent():
+    # The model correctly doubles the backslash for LaTeX \% (percentages subtopic).
+    # The repair must NOT over-escape the already-valid "\\" pair into "\\\%".
+    raw = '{"problem_text": "What is $25\\\\%$ of $48$?", "sympy_expression": "Rational(25,100) * 48"}'
+    data = _parse_problem_json(raw)
+    assert data["problem_text"] == "What is $25\\%$ of $48$?"
+
+
+def test_parse_single_escaped_percent():
+    # A lone \% (single backslash) must be repaired to valid JSON too
+    raw = '{"problem_text": "$25\\%$ of $48$"}'
+    data = _parse_problem_json(raw)
+    assert data["problem_text"] == "$25\\%$ of $48$"
 
 
 def test_parse_fenced_json():

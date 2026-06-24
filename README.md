@@ -1,6 +1,6 @@
 # Math Tutor Agent
 
-An adaptive K-12 math tutoring system that generates problems, evaluates answers with a symbolic math solver, and retrieves targeted explanations from a curated knowledge base. Difficulty and topic selection adjust automatically based on each student's performance history.
+An adaptive K-12 **arithmetic and algebra** tutoring system that generates problems, evaluates answers with a symbolic math solver, and retrieves targeted explanations from a curated knowledge base. It covers two topics — **Fractions & Ratios** (equivalent fractions, the four operations, proportions, percentages) and **Algebra** (linear equations, evaluating expressions, linear relationships). Difficulty and topic selection adjust automatically based on each student's performance history.
 
 Built as a portfolio project demonstrating core AI engineering techniques: retrieval-augmented generation (RAG), stateful agentic loops with LangGraph, deterministic answer evaluation with SymPy, and persistent student modeling.
 
@@ -70,9 +70,8 @@ math-tutor-agent/
 │       └── app.py          # NiceGUI app (problem display, answer input, mastery dashboard)
 ├── data/
 │   ├── knowledge_base/     # Source JSON chunks (version-controlled)
-│   │   ├── fractions.json
-│   │   ├── algebra.json
-│   │   └── ...
+│   │   ├── fractions_ratios.json
+│   │   └── algebra.json
 │   ├── chromadb/           # ChromaDB vector store (generated, gitignored)
 │   └── students/           # Per-student state files (generated, gitignored)
 ├── tests/
@@ -277,11 +276,11 @@ The knowledge base lives in `data/knowledge_base/` as version-controlled JSON fi
 - `worked_example` — walks through a sample problem step by step
 - `common_misconception` — describes a specific error pattern and why it's wrong
 
-**Topics covered** (Phase 1):
-- `fractions`: equivalent fractions, addition/subtraction, multiplication/division
-- `algebra`: linear equations, inequalities, substitution
+**Topics covered**:
+- `fractions_ratios` ("Fractions & Ratios"): equivalent fractions, addition/subtraction, multiplication/division, proportions, percentages
+- `algebra`: linear equations, evaluating expressions, linear relationships (slope, y = mx + b)
 
-Run `python scripts/ingest_kb.py` to load all chunks into ChromaDB. The script is idempotent — re-running it skips chunks that are already indexed.
+Run `python scripts/ingest_kb.py` to load all chunks into ChromaDB. The script is idempotent — re-running it skips chunks that are already indexed. (Because the loader only *adds* new chunk ids, delete `data/chromadb/` and re-run after renaming or removing chunks.)
 
 ---
 

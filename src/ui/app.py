@@ -27,10 +27,8 @@ NODE_LABELS = {
 }
 
 TOPIC_LABELS = {
-    "fractions": "Fractions",
-    "ratios": "Ratios",
+    "fractions_ratios": "Fractions & Ratios",
     "algebra": "Algebra",
-    "geometry": "Geometry",
 }
 
 DIFFICULTY_LABELS = {1: "Intro", 2: "Easy", 3: "Medium", 4: "Hard", 5: "Challenge"}
@@ -57,6 +55,30 @@ KATEX_HEAD = """
       });
     });
   };
+
+  // Re-typeset automatically whenever .math-content elements are added to the DOM.
+  // This fires on every main_area.refresh() without manual coordination from Python.
+  // We only watch addedNodes (not characterData) so KaTeX's own DOM writes — which
+  // add <span> children inside existing .math-content divs — don't retrigger this.
+  document.addEventListener('DOMContentLoaded', function () {
+    new MutationObserver(function (mutations) {
+      var found = false;
+      for (var i = 0; i < mutations.length && !found; i++) {
+        mutations[i].addedNodes.forEach(function (n) {
+          if (!found && n.nodeType === 1) {
+            if (n.classList.contains('math-content') ||
+                (n.querySelector && n.querySelector('.math-content'))) {
+              found = true;
+            }
+          }
+        });
+      }
+      if (found) {
+        clearTimeout(window._mathTypesetTimer);
+        window._mathTypesetTimer = setTimeout(window.typesetMath, 50);
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
 </script>
 """
 
@@ -110,8 +132,9 @@ def main_page():
         "config": None,
         "phase": "name",  # name | working | answering | reviewing
         "attempts": 0,
-        "last": None,       # snapshot shown in the reviewing phase
-        "status_col": None,  # live operation feed target while working
+        "last": None,         # snapshot shown in the reviewing phase
+        "working_problem": "", # problem to display during working phase (empty = generating new)
+        "status_col": None,   # live operation feed target while working
     }
 
     def graph_values() -> dict:
@@ -165,11 +188,12 @@ def main_page():
             return
 
         values = graph_values()
-        problem = (
-            session["last"]["problem"]
-            if session["phase"] == "reviewing" and session["last"]
-            else values.get("current_problem", "")
-        )
+        if session["phase"] == "working":
+            problem = session["working_problem"]
+        elif session["phase"] == "reviewing" and session["last"]:
+            problem = session["last"]["problem"]
+        else:
+            problem = values.get("current_problem", "")
         topic = values.get("current_topic", "")
         subtopic = values.get("current_subtopic", "")
         difficulty = values.get("current_difficulty", 2)
@@ -179,7 +203,7 @@ def main_page():
             with ui.card().classes(
                 "w-full p-8 rounded-xl shadow-sm border border-slate-200"
             ):
-                if topic:
+                if topic and problem:
                     with ui.row().classes("gap-2 mb-3"):
                         ui.badge(TOPIC_LABELS.get(topic, topic)).props(
                             "color=indigo-1 text-color=indigo-9"
@@ -190,9 +214,14 @@ def main_page():
                         ui.badge(DIFFICULTY_LABELS.get(difficulty, "")).props(
                             "color=amber-1 text-color=amber-9"
                         ).classes("px-2 py-1")
-                ui.html(
-                    f'<div class="math-content text-2xl text-slate-800">{html_lib.escape(problem)}</div>'
-                )
+                if problem:
+                    ui.html(
+                        f'<div class="math-content text-2xl text-slate-800">{html_lib.escape(problem)}</div>'
+                    )
+                else:
+                    ui.label("Preparing your next problem…").classes(
+                        "text-slate-400 text-base italic"
+                    )
 
             if session["phase"] == "working":
                 with ui.card().classes(
@@ -262,9 +291,9 @@ def main_page():
     page_client = context.client
 
     def typeset() -> None:
-        """Typeset $...$ inside .math-content containers. The 50 ms delay lets
-        Vue finish applying the preceding DOM updates first."""
-        page_client.run_javascript("setTimeout(window.typesetMath, 50)")
+        """Fallback: manually trigger KaTeX for cases the MutationObserver misses
+        (e.g. content that was already in the DOM but not yet typeset on first load)."""
+        page_client.run_javascript("setTimeout(window.typesetMath, 100);")
 
     # ── Graph execution ───────────────────────────────────────────────────────
     async def stream_graph(graph_input) -> None:
@@ -292,6 +321,7 @@ def main_page():
             return
         session["student_id"] = name.strip().lower().replace(" ", "_")
         session["config"] = {"configurable": {"thread_id": session["student_id"]}}
+        session["working_problem"] = ""  # no problem yet
         session["phase"] = "working"
         refresh_drawer()
         main_area.refresh()
@@ -306,8 +336,11 @@ def main_page():
             return
         student_answer = answer.strip()
         graph.update_state(session["config"], {"student_answer": student_answer})
+        # Keep the problem visible and typeset during verification
+        session["working_problem"] = graph_values().get("current_problem", "")
         session["phase"] = "working"
         main_area.refresh()
+        typeset()
 
         # Resume from the interrupt: evaluate → retrieve → feedback → update → adapt → END
         await stream_graph(None)
@@ -329,6 +362,7 @@ def main_page():
         typeset()
 
     async def next_problem() -> None:
+        session["working_problem"] = ""  # hide old problem while generating
         session["phase"] = "working"
         session["last"] = None
         main_area.refresh()

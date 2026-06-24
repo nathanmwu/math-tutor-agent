@@ -1,0 +1,277 @@
+[
+  {
+    "id": "fractions_ratios_equivalent_fractions_concept_001",
+    "text": "Two fractions are equivalent when they describe the exact same amount of a whole, even though the numbers look different. A fraction has two parts: the numerator (the top number) tells you how many pieces you have, and the denominator (the bottom number) tells you how many equal pieces the whole is split into. You make an equivalent fraction by multiplying the numerator AND the denominator by the same nonzero number, or by dividing them both by the same number. For example, start with 1/2. Multiply top and bottom by 2: (1×2)/(2×2) = 2/4. Multiply the original by 3: (1×3)/(2×3) = 3/6. So 1/2 = 2/4 = 3/6 = 50/100. The reason this works is that multiplying the top and bottom by the same number is the same as multiplying the whole fraction by a form of 1 (such as 2/2 or 3/3), and multiplying by 1 never changes a value. The key rule to remember: whatever you do to the top, you must do to the bottom — and it must be multiplication or division, never addition.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "equivalent_fractions",
+      "content_type": "concept_explanation",
+      "difficulty": 1,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_equivalent_fractions_concept_002",
+    "text": "A fraction is in 'lowest terms' (also called 'simplest form') when its numerator and denominator share no common factor other than 1 — you cannot make the numbers any smaller while keeping the same value. To simplify a fraction, find the greatest common factor (GCF) of the numerator and denominator, then divide both by it. Here is the idea step by step using 18/24. Step 1: List the factors of each number. Factors of 18: 1, 2, 3, 6, 9, 18. Factors of 24: 1, 2, 3, 4, 6, 8, 12, 24. Step 2: Find the largest factor they have in common — that is 6, the GCF. Step 3: Divide the top and the bottom by 6: (18÷6)/(24÷6) = 3/4. Step 4: Check that 3 and 4 share no factor besides 1 — they do not, so 3/4 is fully simplified. Simplifying never changes the value: 18/24 and 3/4 are equivalent (both equal 0.75). Final answers are usually expected in simplest form.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "equivalent_fractions",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_equivalent_fractions_worked_example_001",
+    "text": "Problem: Find a fraction equivalent to 3/4 that has a denominator of 20. Step 1: Decide what you must multiply the denominator by to reach the new denominator. Ask: '4 times what equals 20?' Since 4 × 5 = 20, the multiplier is 5. Step 2: To keep the fraction equivalent, multiply the numerator by the SAME number, 5: 3 × 5 = 15. Step 3: Write the new fraction with both results: (3×5)/(4×5) = 15/20. Step 4: Check the answer by simplifying it back. The GCF of 15 and 20 is 5, so 15/20 = (15÷5)/(20÷5) = 3/4 — the original fraction, which confirms 15/20 is equivalent to 3/4. This 'building up' process is exactly how you rewrite fractions so they share a common denominator before adding or subtracting.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "equivalent_fractions",
+      "content_type": "worked_example",
+      "difficulty": 1,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_equivalent_fractions_worked_example_002",
+    "text": "Problem: Simplify 36/48 to lowest terms. Step 1: Find the greatest common factor (GCF) of 36 and 48. List the factors of 36: 1, 2, 3, 4, 6, 9, 12, 18, 36. List the factors of 48: 1, 2, 3, 4, 6, 8, 12, 16, 24, 48. Step 2: Pick the largest number appearing in both lists — that is 12, so the GCF is 12. Step 3: Divide the numerator and the denominator by the GCF: (36÷12)/(48÷12) = 3/4. Step 4: Confirm the result is fully simplified by checking that 3 and 4 have no common factor other than 1 — they do not, so 3/4 is the final answer. (Tip: if you do not spot the GCF right away, you can simplify in smaller steps — for example divide by 2, then by 2 again, then by 3 — and you will reach the same 3/4. Simplifying does not change the value: both 36/48 and 3/4 equal 0.75.)",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "equivalent_fractions",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_equivalent_fractions_common_misconception_001",
+    "text": "A very common error is to ADD the same number to the top and the bottom of a fraction and assume the result is equivalent. For example, a student starts with 1/2 and adds 1 to each part to get 2/3, claiming 1/2 = 2/3. This is wrong: 1/2 = 0.5 but 2/3 ≈ 0.667, so they are not equal. The mistake comes from copying the equivalent-fraction rule but using the wrong operation. Equivalent fractions are created ONLY by multiplying or dividing the numerator and denominator by the same number, never by adding or subtracting. To check whether two fractions are equivalent, simplify both to lowest terms (1/2 is already simplest; 2/3 is already simplest, and they differ) or cross-multiply (1×3 = 3, 2×2 = 4; since 3 ≠ 4 they are not equivalent). Remember: multiply or divide both parts — never add.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "equivalent_fractions",
+      "content_type": "common_misconception",
+      "difficulty": 2,
+      "misconception_tag": "conceptual_error"
+    }
+  },
+  {
+    "id": "fractions_ratios_addition_subtraction_concept_001",
+    "text": "To add or subtract two fractions, they must first have the same denominator — a 'common denominator'. The reason is that the denominator tells you the SIZE of each piece, and you can only combine pieces that are the same size. Case 1: the denominators already match. Then you simply add or subtract the numerators and keep the denominator unchanged. Example: 3/7 + 2/7 = 5/7 (three sevenths plus two sevenths is five sevenths). Case 2: the denominators are different. Then you rewrite each fraction as an equivalent fraction over a common denominator — usually the least common denominator (LCD), which is the smallest number both denominators divide into — and then add or subtract the numerators. After you finish, simplify the answer to lowest terms, and if the problem expects it, rewrite an improper fraction (top heavier than bottom) as a mixed number. The denominator never gets added; only the numerators combine once the pieces are the same size.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "addition_subtraction",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_addition_subtraction_worked_example_001",
+    "text": "Problem: Add 1/4 + 2/3. Step 1: The denominators 4 and 3 are different, so find the least common denominator (LCD). List multiples of 4: 4, 8, 12, 16. List multiples of 3: 3, 6, 9, 12. The smallest multiple in both lists is 12, so the LCD is 12. Step 2: Rewrite each fraction over 12. For 1/4, ask '4 times what is 12?' (it is 3), so multiply top and bottom by 3: 1/4 = 3/12. For 2/3, ask '3 times what is 12?' (it is 4), so multiply top and bottom by 4: 2/3 = 8/12. Step 3: Now that the pieces are the same size, add the numerators and keep the denominator: 3/12 + 8/12 = 11/12. Step 4: Simplify if possible. The GCF of 11 and 12 is 1 (11 is prime and does not divide 12), so 11/12 is already in lowest terms. Final answer: 11/12.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "addition_subtraction",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_addition_subtraction_worked_example_002",
+    "text": "Problem: Subtract 3 1/4 − 1 5/6. Step 1: Convert each mixed number to an improper fraction so the subtraction is easier. For 3 1/4: multiply the whole number by the denominator and add the numerator, 3×4 + 1 = 13, giving 13/4. For 1 5/6: 1×6 + 5 = 11, giving 11/6. Step 2: Find the LCD of 4 and 6. Multiples of 6: 6, 12; 12 is also a multiple of 4, so the LCD is 12. Step 3: Rewrite both fractions over 12: 13/4 = 39/12 (multiply by 3/3) and 11/6 = 22/12 (multiply by 2/2). Step 4: Subtract the numerators: 39/12 − 22/12 = 17/12. Step 5: Convert the improper fraction back to a mixed number: 17 ÷ 12 = 1 with remainder 5, so 17/12 = 1 5/12. Step 6: Check with decimals: 3.25 − 1.833… ≈ 1.417, and 1 5/12 ≈ 1.417 — they match, so the answer 1 5/12 is correct.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "addition_subtraction",
+      "content_type": "worked_example",
+      "difficulty": 3,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_addition_subtraction_common_misconception_001",
+    "text": "The single most common fraction mistake is adding the numerators AND the denominators, for example writing 1/2 + 1/3 = 2/5. This is wrong because the denominator is not a count to be combined — it is the size of each piece, and adding denominators secretly changes the size of the pieces mid-problem. The correct method is to give both fractions a common denominator first. The LCD of 2 and 3 is 6, so 1/2 = 3/6 and 1/3 = 2/6, and then 3/6 + 2/6 = 5/6. A quick sanity check exposes the error: adding two positive fractions must give an answer LARGER than either one, but the wrong result 2/5 = 0.4 is smaller than 1/2 = 0.5, while the correct 5/6 ≈ 0.833 is larger than both. Rule: find a common denominator, then add only the numerators.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "addition_subtraction",
+      "content_type": "common_misconception",
+      "difficulty": 2,
+      "misconception_tag": "wrong_operation"
+    }
+  },
+  {
+    "id": "fractions_ratios_addition_subtraction_common_misconception_002",
+    "text": "When subtracting mixed numbers, students sometimes subtract a larger fractional part from a smaller one without borrowing, which produces a wrong answer. Consider 4 1/4 − 2 3/4. Looking only at the fractions gives 1/4 − 3/4, but 1/4 is smaller than 3/4, so you cannot subtract directly — you must borrow one whole from the 4. Rename 4 1/4 as 3 + (1 + 1/4) = 3 + 5/4 = 3 5/4. Now subtract: the whole numbers give 3 − 2 = 1, and the fractions give 5/4 − 3/4 = 2/4 = 1/2, so the answer is 1 1/2. A student who forgets to borrow might subtract the parts independently and write something like 2 2/4 (wrong whole-number part) or even try 1/4 − 3/4 and get a negative fraction. The fix is always to borrow one whole (which adds the denominator to the numerator) before subtracting the fractional parts.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "addition_subtraction",
+      "content_type": "common_misconception",
+      "difficulty": 3,
+      "misconception_tag": "arithmetic_mistake"
+    }
+  },
+  {
+    "id": "fractions_ratios_multiplication_division_concept_001",
+    "text": "Multiplying and dividing fractions is actually easier than adding them, because you do NOT need a common denominator. To MULTIPLY two fractions, multiply the numerators together to get the new numerator, and multiply the denominators together to get the new denominator. Example: 2/3 × 4/5 = (2×4)/(3×5) = 8/15. You may simplify before multiplying by 'cross-canceling': if a numerator and a denominator (in either fraction) share a common factor, divide both by it first to keep the numbers small. To DIVIDE two fractions, use 'keep–change–flip': KEEP the first fraction exactly as it is, CHANGE the division sign to multiplication, and FLIP the second fraction (swap its numerator and denominator to make its reciprocal). Example: 2/3 ÷ 4/5 = 2/3 × 5/4 = 10/12 = 5/6. Dividing by a fraction asks 'how many of that fraction fit into the first?', which is why flipping-and-multiplying gives the right count.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "multiplication_division",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_multiplication_division_concept_002",
+    "text": "When a multiplication or division problem mixes a whole number with a fraction, first rewrite the whole number as a fraction by placing it over 1 — its value does not change because any number divided by 1 is itself. Multiplication example: 4 × 2/3 = 4/1 × 2/3 = (4×2)/(1×3) = 8/3 = 2 2/3. Division example: 6 ÷ 3/4 = 6/1 ÷ 3/4 = 6/1 × 4/3 (keep–change–flip) = 24/3 = 8. It helps to read division by a fraction as a question: '6 ÷ 3/4' means 'how many three-quarters fit into 6?' Since each whole contains 4 quarters, 6 wholes contain 24 quarters, and grouping them 3 at a time gives 24 ÷ 3 = 8 groups — which matches the answer. Writing whole numbers over 1 lets you use the exact same rules you already know for fractions.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "multiplication_division",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_multiplication_division_worked_example_001",
+    "text": "Problem: Multiply 3/8 × 4/9. Method A — simplify at the end. Step 1: Multiply numerators: 3 × 4 = 12. Step 2: Multiply denominators: 8 × 9 = 72. Step 3: That gives 12/72; the GCF of 12 and 72 is 12, so 12/72 = 1/6. Method B — cross-cancel first (less arithmetic). Step 1: Notice the numerator 3 and the denominator 9 share a factor of 3: divide them to get 1 and 3. Step 2: Notice the numerator 4 and the denominator 8 share a factor of 4: divide them to get 1 and 2. Step 3: The problem becomes 1/2 × 1/3 = (1×1)/(2×3) = 1/6. Both methods give the same answer, 1/6 — cross-canceling just keeps the numbers small so you simplify less at the end.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "multiplication_division",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_multiplication_division_worked_example_002",
+    "text": "Problem: Divide 2 1/2 ÷ 3/4. Step 1: Convert the mixed number to an improper fraction: 2 1/2 = (2×2 + 1)/2 = 5/2. Step 2: Apply keep–change–flip. Keep 5/2, change ÷ to ×, and flip 3/4 to 4/3: 5/2 × 4/3. Step 3: Cross-cancel before multiplying — the 4 and the 2 share a factor of 2, becoming 2 and 1: now 5/1 × 2/3. Step 4: Multiply across: (5×2)/(1×3) = 10/3. Step 5: Convert back to a mixed number: 10 ÷ 3 = 3 remainder 1, so 10/3 = 3 1/3. Step 6: Sanity check — dividing 2.5 by 0.75 should give more than 2.5 (because you are dividing by a number less than 1), and 3 1/3 ≈ 3.33 is indeed larger, so the answer 3 1/3 is reasonable.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "multiplication_division",
+      "content_type": "worked_example",
+      "difficulty": 3,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_multiplication_division_common_misconception_001",
+    "text": "When dividing fractions, students often forget to flip the second fraction, or they flip the wrong one. Take 3/5 ÷ 2/7. A student might multiply straight across and write 3/5 × 2/7 = 6/35 (forgot to flip), or flip the first fraction and write 5/3 × 2/7 = 10/21 (flipped the wrong one). The correct procedure is keep–change–flip applied to the SECOND fraction only: keep 3/5, change ÷ to ×, flip 2/7 to 7/2, giving 3/5 × 7/2 = 21/10 = 2 1/10. A reliable check: dividing by a fraction smaller than 1 (like 2/7) should make the result BIGGER than the starting number, and 2 1/10 is larger than 3/5 — so it passes the check, while the wrong answers 6/35 and 10/21 are both smaller and fail it. Only the second fraction gets flipped.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "multiplication_division",
+      "content_type": "common_misconception",
+      "difficulty": 3,
+      "misconception_tag": "wrong_operation"
+    }
+  },
+  {
+    "id": "fractions_ratios_proportions_concept_001",
+    "text": "A ratio compares two quantities, and a proportion is a statement that two ratios are equal, written as two equal fractions such as a/b = c/d. Proportions are everywhere: scaling a recipe, converting units, reading a map, or finding a missing value that keeps the same relationship. When one of the four numbers is unknown (call it x), you solve the proportion using cross-multiplication. The rule: in a/b = c/d, the cross-products are equal, so a×d = b×c. This works because multiplying both sides of the equation by both denominators clears the fractions. To solve for x, write the cross-product equation, then divide to isolate x. For example, in 2/3 = x/9, cross-multiply to get 2×9 = 3×x, that is 18 = 3x, and divide both sides by 3 to find x = 6. Always set up the two ratios so that matching quantities are in matching positions (for instance, both numerators are the same kind of quantity).",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "proportions",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_proportions_worked_example_001",
+    "text": "Problem: Solve the proportion 3/4 = x/8 for x. Step 1: Cross-multiply. In a/b = c/d the cross-products are equal, so multiply along each diagonal: 3 × 8 = 4 × x. Step 2: Simplify the known side: 3 × 8 = 24, so the equation is 24 = 4x. Step 3: Isolate x by undoing the multiplication — divide both sides by 4: 24 ÷ 4 = x, so x = 6. Step 4: Check by putting 6 back into the original proportion: 3/4 = 6/8? Simplify 6/8 by dividing top and bottom by 2 to get 3/4 — yes, it matches, so x = 6 is correct. (You could also notice that the denominator doubled from 4 to 8, so the numerator must double too, 3 to 6 — the same answer.)",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "proportions",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_proportions_worked_example_002",
+    "text": "Problem: Solve x/5 = 6/10 for x. Step 1: Cross-multiply along the diagonals: x × 10 = 5 × 6. Step 2: Simplify the known products: 5 × 6 = 30, so the equation is 10x = 30. Step 3: Divide both sides by 10 to isolate x: x = 30 ÷ 10 = 3. Step 4: Check by substituting back: 3/5 = 6/10? Simplify 6/10 by dividing by 2 to get 3/5 — it matches, so x = 3 is correct. Notice the unknown can sit in the numerator; the cross-multiplication method works no matter which of the four positions is unknown, because you always multiply along the two diagonals and then solve the resulting simple equation.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "proportions",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_proportions_worked_example_003",
+    "text": "Problem: Solve 2/3 = 10/x for x, where the unknown is in the denominator. Step 1: Cross-multiply along the diagonals: 2 × x = 3 × 10. Step 2: Simplify the known side: 3 × 10 = 30, so the equation is 2x = 30. Step 3: Divide both sides by 2 to isolate x: x = 30 ÷ 2 = 15. Step 4: Check by substituting back: 2/3 = 10/15? Simplify 10/15 by dividing top and bottom by 5 to get 2/3 — it matches, so x = 15 is correct. The important habit is to multiply each numerator by the OTHER fraction's denominator; doing that correctly turns any proportion, even one with x on the bottom, into a one-step equation you already know how to solve.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "proportions",
+      "content_type": "worked_example",
+      "difficulty": 3,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_proportions_common_misconception_001",
+    "text": "A frequent proportion error is to combine the numbers straight across — multiplying or adding the two tops and the two bottoms — instead of cross-multiplying along the diagonals. For 3/4 = x/8, a student might write 3 × x on one side, mismatching the diagonals, or add to get x = 8 − 4 + 3 = 7. Both are wrong. Cross-multiplication pairs each numerator with the OTHER fraction's denominator: 3 × 8 = 4 × x, giving 24 = 4x and x = 6. Another version of the mistake is setting up the proportion with the quantities in mismatched positions (for example putting 'parts' over 'parts' on one side but 'parts' over 'whole' on the other); always line up the same kind of quantity in the same position before cross-multiplying. Check your answer by simplifying both fractions — a correct solution makes the two ratios equal.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "proportions",
+      "content_type": "common_misconception",
+      "difficulty": 3,
+      "misconception_tag": "wrong_operation"
+    }
+  },
+  {
+    "id": "fractions_ratios_percentages_concept_001",
+    "text": "The word 'percent' means 'per hundred', so a percent is just a fraction whose denominator is 100. For example, 20% means 20/100, which simplifies to 1/5 and equals the decimal 0.20. To use a percent in a calculation you first convert it: divide by 100 (move the decimal point two places left), so 20% becomes 0.20 and 7% becomes 0.07. Two question types come up constantly. Type 1 — 'What is P% of N?' — means multiply: take the percent as a fraction or decimal and multiply by N. For instance, 20% of 50 is (20/100) × 50 = 0.20 × 50 = 10. Type 2 — 'M is what percent of N?' — means compare the part to the whole and convert to a percent: divide M by N, then multiply by 100. For instance, '30 is what percent of 60?' is (30/60) × 100 = 0.5 × 100 = 50, so 30 is 50% of 60. The word 'of' signals multiplication, and 'what percent' signals 'divide the part by the whole, then ×100'.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "percentages",
+      "content_type": "concept_explanation",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_percentages_worked_example_001",
+    "text": "Problem: What is 20% of 50? This is a 'percent of a number' question, so it means multiply. Step 1: Convert the percent to a fraction over 100: 20% = 20/100. Step 2: The word 'of' means multiply, so compute (20/100) × 50. Step 3: Simplify before multiplying if you like — 20/100 reduces to 1/5, and 1/5 of 50 is 50 ÷ 5 = 10. (Or use the decimal: 20% = 0.20, and 0.20 × 50 = 10.) Step 4: Check that the size is reasonable — 20% is one-fifth, a small part of 50, and 10 is indeed one-fifth of 50. Final answer: 10.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "percentages",
+      "content_type": "worked_example",
+      "difficulty": 1,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_percentages_worked_example_002",
+    "text": "Problem: What is 15% of 80? Step 1: Rewrite the percent as a fraction over 100: 15% = 15/100 (equivalently the decimal 0.15). Step 2: 'Of' means multiply, so compute (15/100) × 80. Step 3: Multiply the numerator: 15 × 80 = 1200, giving 1200/100. Step 4: Divide by 100 (move the decimal two places left): 1200/100 = 12. (A quick mental method: 10% of 80 is 8, and 5% is half of that, 4, so 15% = 8 + 4 = 12 — the same answer.) Step 5: Check reasonableness — 15% is a bit less than one-sixth of 80, and 12 is a small slice of 80, which fits. Final answer: 12.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "percentages",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_percentages_worked_example_003",
+    "text": "Problem: 30 is what percent of 60? This is a 'what percent' question, so you compare the part to the whole and convert to a percent. Step 1: Identify the part and the whole. The part is 30 and the whole (the number after 'of') is 60. Step 2: Write the comparison as a fraction, part over whole: 30/60. Step 3: Simplify: 30/60 = 1/2 = 0.5. Step 4: Convert the decimal or fraction to a percent by multiplying by 100: 0.5 × 100 = 50. Step 5: Interpret the answer — 30 is 50% of 60, which makes sense because 30 is exactly half of 60. Final answer: 50 (meaning 50%).",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "percentages",
+      "content_type": "worked_example",
+      "difficulty": 2,
+      "misconception_tag": null
+    }
+  },
+  {
+    "id": "fractions_ratios_percentages_common_misconception_001",
+    "text": "A common percentage error is to forget that a percent must be converted to a fraction or decimal before multiplying — students treat the percent as a plain whole number. For 'What is 20% of 50?', this leads to computing 20 × 50 = 1000, which is far too big (you cannot have 1000 as a part of 50). The fix is to remember that percent means 'per hundred': convert 20% to 20/100 = 0.20 first, then multiply, 0.20 × 50 = 10. A related slip is misplacing the decimal point when dividing by 100 — for example writing 20% as 2.0 instead of 0.20. A good reasonableness check: a percent less than 100% must give an answer SMALLER than the original number, so 20% of 50 has to be less than 50; 10 passes this test while 1000 obviously fails it. Always convert the percent before you multiply.",
+    "metadata": {
+      "topic": "fractions_ratios",
+      "subtopic": "percentages",
+      "content_type": "common_misconception",
+      "difficulty": 2,
+      "misconception_tag": "conceptual_error"
+    }
+  }
+]

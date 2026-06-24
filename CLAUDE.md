@@ -58,7 +58,7 @@ Full requirements and API contracts: see [project_spec.md](project_spec.md).
 
 **SymPy for answer evaluation** — LLM evaluation of math answers has unacceptable failure modes (marking correct answers wrong; accepting wrong answers). SymPy compares symbolic expressions deterministically. LLM is still used for error categorization, which is a qualitative task it handles well.
 
-**ChromaDB for local vector store** — No Docker, no server, `PersistentClient(path=...)` in-process. Adequate for a knowledge base of ~300 chunks.
+**ChromaDB for local vector store** — No Docker, no server, `PersistentClient(path=...)` in-process. The knowledge base is ~45 hand-authored chunks across two topics (fractions & ratios, algebra); ChromaDB scales comfortably well beyond that.
 
 **EMA mastery over Bayesian Knowledge Tracing** — BKT requires per-skill parameter estimation and training data. EMA (`0.8 * old + 0.2 * new`) is transparent, correct in direction, and sufficient for demonstrating adaptive behavior. BKT is noted in the README as the production path.
 
@@ -66,7 +66,7 @@ Full requirements and API contracts: see [project_spec.md](project_spec.md).
 
 **NiceGUI over Streamlit / React+shadcn** — Streamlit's rerun-per-interaction model was too slow; a React frontend would force a backend API split, Node toolchain, and two processes. NiceGUI is event-driven, single-process, pip-only, and calls the graph in-process. LaTeX is rendered by KaTeX (`src/ui/app.py:KATEX_HEAD`), scoped strictly to `.math-content` divs — NEVER run KaTeX on `document.body`: its text-node scan destroys Vue's empty-text-node fragment anchors and freezes the UI. Trigger typesetting via the `page_client` handle captured at page build (ambient client context is lost after `await` in handlers).
 
-**Pure-notation problems over word problems** — Problems are written purely mathematically (`$\frac{1}{6} + \frac{2}{3} =$`, `$3x - 9 = 12$, $x = ?$`). Word problems let the story and the math drift apart (the source of past answer-mismatch bugs); pure notation keeps `problem_text` and `sympy_expression` two views of the same object.
+**Pure-notation problems over word problems** — Problems are written purely mathematically (`$\frac{1}{6} + \frac{2}{3} =$`, `$3x - 9 = 12$, $x = ?$`). Word problems let the story and the math drift apart (the source of past answer-mismatch bugs); pure notation keeps `problem_text` and `sympy_expression` two views of the same object. The one deliberate exception is **percentages**, which use two fixed question templates (`"What is $P\%$ of $N$?"`, `"$M$ is what percent of $N$?"`) — these are deterministic, so they map cleanly to a SymPy computation without drift. The current generator only emits problems with a concrete numeric answer (`generate_problem_node`'s `is_number` gate), so every subtopic must resolve to a number or an `Eq` that solves to one.
 
 ---
 
@@ -102,10 +102,8 @@ Tutor-Agent/
 │   └── ingest_kb.py       # one-time KB ingestion
 ├── data/
 │   ├── knowledge_base/    # source JSON chunks (version-controlled)
-│   │   ├── fractions.json
-│   │   ├── ratios.json
-│   │   ├── algebra.json
-│   │   └── geometry.json
+│   │   ├── fractions_ratios.json
+│   │   └── algebra.json
 │   ├── chromadb/          # ChromaDB persistence (gitignored)
 │   └── students/          # per-student state JSON (gitignored)
 └── src/

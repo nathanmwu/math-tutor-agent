@@ -4,6 +4,7 @@ import json
 import os
 import random
 import re
+from math import gcd
 from pathlib import Path
 
 from langchain_ollama import ChatOllama
@@ -14,19 +15,23 @@ from src.agent.prompts import (
     CATEGORIZE_ERROR_PROMPT,
     FEEDBACK_CORRECT_PROMPT,
     FEEDBACK_INCORRECT_PROMPT,
-    GENERATE_PROBLEM_PROMPT,
+    build_generate_problem_prompt,
 )
 from src.agent.solution_steps import generate_solution_steps
 from src.knowledge.retriever import retrieve_content
 from src.state import store
 
-CURRICULUM_ORDER = ["fractions", "ratios", "algebra", "geometry"]
+CURRICULUM_ORDER = ["fractions_ratios", "algebra"]
 
 SUBTOPICS: dict[str, list[str]] = {
-    "fractions": ["equivalent_fractions", "addition_subtraction", "multiplication_division"],
-    "ratios": ["unit_rates", "proportions", "percentages"],
-    "algebra": ["linear_equations", "inequalities", "substitution"],
-    "geometry": ["area_perimeter", "pythagorean_theorem", "coordinate_plane"],
+    "fractions_ratios": [
+        "equivalent_fractions",
+        "addition_subtraction",
+        "multiplication_division",
+        "proportions",
+        "percentages",
+    ],
+    "algebra": ["linear_equations", "evaluating_expressions", "linear_relationships"],
 }
 
 STUDENT_STATE_DIR = Path(os.getenv("STUDENT_STATE_DIR", "data/students"))
@@ -53,8 +58,11 @@ def _parse_problem_json(raw: str) -> dict:
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
-    # Double any lone backslash not followed by a valid JSON escape char
-    repaired = re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", raw)
+    # Double any LONE backslash not followed by a valid JSON escape char. The
+    # negative lookbehind (?<!\\) avoids touching the second backslash of an
+    # already-correct "\\" pair — e.g. the model correctly emits "\\%" for LaTeX
+    # \%, which must stay "\\%" (valid) and not become "\\\%" (invalid escape).
+    repaired = re.sub(r'(?<!\\)\\(?!["\\/bfnrtu])', r"\\\\", raw)
     data = json.loads(repaired)
 
     # Restore LaTeX commands that decoded to control characters
@@ -88,6 +96,9 @@ def symbolic_check(student_input: str, sympy_answer: str) -> bool | None:
             cleaned,
             flags=re.IGNORECASE,
         ).strip()
+
+        # Accept a trailing percent sign for "what percent" answers ("50%" == "50")
+        cleaned = re.sub(r"\s*%\s*$", "", cleaned).strip()
 
         student_expr = sympify(cleaned, rational=True)
         correct_expr = sympify(sympy_answer, rational=True)
@@ -150,10 +161,14 @@ def generate_problem_node(state: TutorState) -> dict:
     llm = ChatOllama(model=os.getenv("OLLAMA_MODEL", "llama3:8b"), temperature=0.7)
 
     history = state.get("session_history", [])
-    recent = history[-3:] if len(history) >= 3 else history
-    recent_problems = "; ".join(item.get("topic", "") for item in recent) if recent else "none"
+    recent = history[-5:] if len(history) >= 5 else history
+    recent_problems = (
+        "; ".join(item.get("problem_text", item.get("topic", "")) for item in recent)
+        if recent else "none"
+    )
+    seen_problems = {item.get("problem_text", "") for item in history}
 
-    prompt = GENERATE_PROBLEM_PROMPT.format(
+    prompt = build_generate_problem_prompt(
         topic=state["current_topic"],
         subtopic=state["current_subtopic"],
         difficulty=state["current_difficulty"],
@@ -202,6 +217,9 @@ def generate_problem_node(state: TutorState) -> dict:
                 # booleans (an Eq of two constants evaluates to True/False)
                 if not getattr(computed, "is_number", False):
                     continue
+                # Reject exact duplicates of problems already seen this session
+                if pt in seen_problems:
+                    continue
                 problem_text = pt
                 sympy_answer = str(computed)
                 sympy_expression = expr_str
@@ -237,6 +255,13 @@ def evaluate_answer_node(state: TutorState) -> dict:
                 "parse_error": True,
             }
         }
+
+    # For equivalent_fractions, the answer must be fully reduced — reject any
+    # fraction a/b where gcd(a, b) != 1 (e.g. "36/48" is wrong; "3/4" is right).
+    if result and state.get("current_subtopic") == "equivalent_fractions":
+        m = re.match(r"^\s*(\d+)\s*/\s*(\d+)\s*$", state["student_answer"].strip())
+        if m and gcd(int(m.group(1)), int(m.group(2))) != 1:
+            result = False
 
     if result:
         return {
@@ -328,8 +353,10 @@ def update_state_node(state: TutorState) -> dict:
     history.append(
         {
             "topic": state["current_topic"],
+            "subtopic": state["current_subtopic"],
             "is_correct": evaluation.get("is_correct", False),
             "difficulty": state["current_difficulty"],
+            "problem_text": state.get("current_problem", ""),
         }
     )
 
