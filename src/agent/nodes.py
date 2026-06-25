@@ -8,7 +8,7 @@ from math import gcd
 from pathlib import Path
 
 from langchain_ollama import ChatOllama
-from sympy import Eq, simplify, solve, sympify
+from sympy import Eq, Rational, simplify, solve, sympify
 
 from src.agent.state import TutorState
 from src.agent.prompts import (
@@ -182,8 +182,13 @@ def select_topic_node(state: TutorState) -> dict:
         ]
         topic, subtopic = random.choices(candidates, weights=weights, k=1)[0]
 
-    sm = student.subtopic_mastery.get(subtopic_key(topic, subtopic))
-    difficulty = sm.current_difficulty if sm is not None else 2
+    # Difficulty tracks the mastery the student has demonstrated on this topic —
+    # the same signal as the progress bar — so a strong student gets challenge
+    # problems and never drops back to "Easy" just because a fresh subtopic was
+    # selected (subtopic mastery still drives WHICH subtopic, above).
+    tm = student.topic_mastery.get(topic)
+    topic_score = tm.mastery_score if tm is not None else 0.0
+    difficulty = store.difficulty_for_mastery(topic_score)
 
     return {
         "current_topic": topic,
@@ -255,6 +260,130 @@ def _build_linear_relationship_problem(
     return None
 
 
+def _finalize_problem(
+    problem_text: str, sympy_expression: str, seen_problems: set[str]
+) -> dict | None:
+    """Validate a candidate problem and build the node result, or return None.
+
+    We evaluate the expression ourselves (never trusting an LLM's arithmetic):
+    an ``Eq`` must solve to a single value that checks back, anything else must
+    reduce to one concrete number, and exact session duplicates are rejected.
+    Shared by the LLM loop and the deterministic fallback so both are validated
+    identically.
+    """
+    try:
+        computed = sympify(
+            sympy_expression, locals={"Rational": Rational, "Eq": Eq}, rational=True
+        )
+        if isinstance(computed, Eq):
+            free = computed.free_symbols
+            if len(free) != 1:
+                return None
+            var = list(free)[0]
+            solutions = solve(computed, var)
+            if len(solutions) != 1:
+                return None
+            candidate = solutions[0]
+            if not computed.subs(var, candidate):  # substitute back — catch typos
+                return None
+            computed = candidate
+        elif isinstance(computed, list):
+            if len(computed) != 1:
+                return None
+            computed = computed[0]
+        if not getattr(computed, "is_number", False):
+            return None
+        if problem_text in seen_problems:
+            return None
+        return {
+            "current_problem": problem_text,
+            "sympy_answer": str(computed),
+            "sympy_expression": sympy_expression,
+            "solution_steps": generate_solution_steps(sympy_expression),
+            "student_answer": "",
+            "evaluation": {},
+            "retrieved_chunks": [],
+            "feedback": "",
+        }
+    except Exception:
+        return None
+
+
+def _fallback_problem(
+    subtopic: str, difficulty: int, seen_problems: set[str]
+) -> dict | None:
+    """Deterministic, on-topic, difficulty-scaled problem used when the LLM
+    generator fails — so the student is never dropped to an off-topic placeholder
+    (the old ``2 + 2``). Number magnitude grows with difficulty; every candidate
+    passes the same validation as an LLM-authored one.
+    """
+    hi = 3 + 2 * difficulty  # number magnitude grows with difficulty
+
+    def _nonzero(lo: int, h: int) -> int:
+        return random.choice([n for n in range(lo, h + 1) if n != 0])
+
+    for _ in range(40):
+        problem_text = sympy_expression = None
+
+        if subtopic == "linear_relationships":
+            built = _build_linear_relationship_problem(difficulty, seen_problems)
+            if built is not None:
+                return built
+            continue
+        elif subtopic == "equivalent_fractions":
+            b = random.randint(2, 6)
+            a = random.randint(1, b - 1)
+            k = random.randint(2, 2 + difficulty)
+            problem_text = rf"$\frac{{{a * k}}}{{{b * k}}} =$"
+            sympy_expression = f"Rational({a * k},{b * k})"
+        elif subtopic == "addition_subtraction":
+            d1, d2 = random.randint(2, hi), random.randint(2, hi)
+            n1, n2 = random.randint(1, d1), random.randint(1, d2)
+            latex_op, py_op = random.choice([("+", "+"), ("-", "-")])
+            problem_text = rf"$\frac{{{n1}}}{{{d1}}} {latex_op} \frac{{{n2}}}{{{d2}}} =$"
+            sympy_expression = f"Rational({n1},{d1}) {py_op} Rational({n2},{d2})"
+        elif subtopic == "multiplication_division":
+            d1, d2 = random.randint(2, hi), random.randint(2, hi)
+            n1, n2 = random.randint(1, d1), random.randint(1, d2)
+            latex_op, py_op = random.choice([(r"\times", "*"), (r"\div", "/")])
+            problem_text = rf"$\frac{{{n1}}}{{{d1}}} {latex_op} \frac{{{n2}}}{{{d2}}} =$"
+            sympy_expression = f"Rational({n1},{d1}) {py_op} Rational({n2},{d2})"
+        elif subtopic == "percentages":
+            n = random.randint(1, hi) * 20  # multiple of 20 keeps the answer whole
+            p = random.choice([5, 10, 20, 25, 40, 50, 75])
+            problem_text = rf"What is ${p}\%$ of ${n}$?"
+            sympy_expression = f"Rational({p},100) * {n}"
+        elif subtopic == "proportions":
+            b = random.randint(2, 6)
+            a = random.randint(1, hi)
+            c = b * random.randint(1, 1 + difficulty)  # keeps x a whole number
+            problem_text = rf"$\frac{{{a}}}{{{b}}} = \frac{{x}}{{{c}}}$,  $x = ?$"
+            sympy_expression = f"Eq(Rational({a},{b}), x/{c})"
+        elif subtopic == "linear_equations":
+            x0 = random.randint(1, hi)
+            a = random.randint(2, 2 + difficulty)
+            b = _nonzero(-hi, hi)
+            c = a * x0 + b
+            sign = "+" if b >= 0 else "-"
+            problem_text = rf"${a}x {sign} {abs(b)} = {c}$,  $x = ?$"
+            sympy_expression = f"Eq({a}*x {sign} {abs(b)}, {c})"
+        elif subtopic == "evaluating_expressions":
+            m = random.randint(2, 2 + difficulty)
+            k = _nonzero(-hi, hi)
+            v = random.randint(1, hi)
+            sign = "+" if k >= 0 else "-"
+            problem_text = rf"Evaluate ${m}x {sign} {abs(k)}$ at $x = {v}$"
+            sympy_expression = f"{m}*{v} {sign} {abs(k)}"
+
+        if problem_text is None:
+            continue
+        result = _finalize_problem(problem_text, sympy_expression, seen_problems)
+        if result is not None:
+            return result
+
+    return None
+
+
 def generate_problem_node(state: TutorState) -> dict:
     history = state.get("session_history", [])
     seen_problems = {item.get("problem_text", "") for item in history}
@@ -295,73 +424,33 @@ def generate_problem_node(state: TutorState) -> dict:
         avoid_signatures=avoid_signatures,
     )
 
-    problem_text = None
-    sympy_answer = None
-    sympy_expression = None
-
     for _ in range(3):
         response = llm.invoke(prompt)
-        raw = response.content.strip()
-
         try:
-            data = _parse_problem_json(raw)
+            data = _parse_problem_json(response.content.strip())
             pt = data.get("problem_text", "").strip()
             expr_str = data.get("sympy_expression", "").strip()
-            if pt and expr_str:
-                # Evaluate the expression ourselves — never trust the LLM's arithmetic
-                computed = sympify(
-                    expr_str,
-                    locals={"Rational": __import__("sympy").Rational, "Eq": Eq},
-                    rational=True,
-                )
-                # Eq(lhs, rhs) — solve for the single free symbol
-                if isinstance(computed, Eq):
-                    free = computed.free_symbols
-                    if len(free) != 1:
-                        continue
-                    solutions = solve(computed, list(free)[0])
-                    if len(solutions) != 1:
-                        continue
-                    candidate = solutions[0]
-                    # Verify: substitute back — catches LLM typos in the equation
-                    check = computed.subs(list(free)[0], candidate)
-                    if not check:
-                        continue
-                    computed = candidate
-                # solve() returning a list (legacy path)
-                elif isinstance(computed, list):
-                    if len(computed) != 1:
-                        continue
-                    computed = computed[0]
-                # must be a concrete number — rejects leftover symbols AND
-                # booleans (an Eq of two constants evaluates to True/False)
-                if not getattr(computed, "is_number", False):
-                    continue
-                # Reject exact duplicates of problems already seen this session
-                if pt in seen_problems:
-                    continue
-                problem_text = pt
-                sympy_answer = str(computed)
-                sympy_expression = expr_str
-                break
         except Exception:
             continue
+        if not (pt and expr_str):
+            continue
+        result = _finalize_problem(pt, expr_str, seen_problems)
+        if result is not None:
+            return result
 
-    if problem_text is None or sympy_answer is None:
-        problem_text = "$2 + 2 =$"
-        sympy_answer = "4"
-        sympy_expression = "2 + 2"
+    # The LLM failed to produce a valid problem — serve a DETERMINISTIC, on-topic,
+    # difficulty-scaled problem instead of an off-topic placeholder.
+    fallback = _fallback_problem(
+        state["current_subtopic"], state["current_difficulty"], seen_problems
+    )
+    if fallback is not None:
+        return fallback
 
-    return {
-        "current_problem": problem_text,
-        "sympy_answer": sympy_answer,
-        "sympy_expression": sympy_expression,
-        "solution_steps": generate_solution_steps(sympy_expression),
-        "student_answer": "",
-        "evaluation": {},
-        "retrieved_chunks": [],
-        "feedback": "",
-    }
+    # Absolute last resort: a difficulty-scaled sum (never a stale "2 + 2").
+    a, b = random.randint(2, 3 + 2 * state["current_difficulty"]), random.randint(
+        2, 3 + 2 * state["current_difficulty"]
+    )
+    return _finalize_problem(rf"${a} + {b} =$", f"{a} + {b}", set())
 
 
 def evaluate_answer_node(state: TutorState) -> dict:

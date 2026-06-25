@@ -14,6 +14,7 @@ from src.state import store
 from src.state.models import (
     StudentState,
     SubtopicMastery,
+    TopicMastery,
     subtopic_key,
 )
 
@@ -35,42 +36,45 @@ def test_prompt_includes_variant_and_avoid_signatures():
     assert "two-digit" in prompt
 
 
-# ── Sustained difficulty ramp ────────────────────────────────────────────────
+# ── Difficulty tracks mastery ─────────────────────────────────────────────────
 
-def test_difficulty_does_not_rise_before_streak_threshold():
+def test_difficulty_for_mastery_bands():
+    assert store.difficulty_for_mastery(0.0) == 1
+    assert store.difficulty_for_mastery(0.3) == 2
+    assert store.difficulty_for_mastery(0.5) == 3
+    assert store.difficulty_for_mastery(0.7) == 4
+    assert store.difficulty_for_mastery(1.0) == store.MAX_DIFFICULTY
+
+
+def test_difficulty_rises_as_mastery_rises():
     sm = SubtopicMastery(topic="algebra", subtopic="linear_equations")
-    # Two correct in a row — below RAMP_STREAK_THRESHOLD (3): difficulty unchanged.
-    sm = store.update_subtopic_mastery(sm, True)
-    sm = store.update_subtopic_mastery(sm, True)
-    assert sm.current_difficulty == 2
-    assert sm.consecutive_correct == 2
-
-
-def test_difficulty_rises_at_streak_threshold_and_resets_streak():
-    sm = SubtopicMastery(topic="algebra", subtopic="linear_equations")
-    for _ in range(store.RAMP_STREAK_THRESHOLD):
+    # A fresh subtopic (mastery 0) sits in the easiest band, and difficulty
+    # climbs in lockstep with the EMA as the student succeeds.
+    sm = store.update_subtopic_mastery(sm, True)  # 0 -> 0.3
+    assert sm.current_difficulty == store.difficulty_for_mastery(sm.mastery_score) == 2
+    for _ in range(10):
         sm = store.update_subtopic_mastery(sm, True)
-    assert sm.current_difficulty == 3       # stepped up once
-    assert sm.consecutive_correct == 0       # streak re-earned from scratch
+    assert sm.mastery_score == 1.0                 # snaps to full
+    assert sm.current_difficulty == store.MAX_DIFFICULTY
 
 
-def test_difficulty_steps_down_and_resets_on_miss():
-    sm = SubtopicMastery(topic="algebra", subtopic="linear_equations", current_difficulty=3)
-    sm.consecutive_correct = 2
-    sm = store.update_subtopic_mastery(sm, False)
-    assert sm.current_difficulty == 2
+def test_difficulty_eases_after_misses():
+    sm = SubtopicMastery(
+        topic="algebra", subtopic="linear_equations", mastery_score=1.0, current_difficulty=5
+    )
+    sm = store.update_subtopic_mastery(sm, False)  # 1.0 -> 0.7 -> band 4
+    assert sm.current_difficulty == 4
     assert sm.consecutive_correct == 0
 
 
 def test_difficulty_clamps_at_bounds():
-    # Never below MIN
-    low = SubtopicMastery(topic="algebra", subtopic="linear_equations", current_difficulty=1)
-    low = store.update_subtopic_mastery(low, False)
+    low = SubtopicMastery(topic="algebra", subtopic="linear_equations")
+    for _ in range(10):
+        low = store.update_subtopic_mastery(low, False)
     assert low.current_difficulty == store.MIN_DIFFICULTY
 
-    # Never above MAX even with a long streak
-    high = SubtopicMastery(topic="algebra", subtopic="linear_equations", current_difficulty=5)
-    for _ in range(10):
+    high = SubtopicMastery(topic="algebra", subtopic="linear_equations")
+    for _ in range(15):
         high = store.update_subtopic_mastery(high, True)
     assert high.current_difficulty == store.MAX_DIFFICULTY
 
@@ -78,7 +82,15 @@ def test_difficulty_clamps_at_bounds():
 def test_ema_moves_toward_one_on_success():
     sm = SubtopicMastery(topic="algebra", subtopic="linear_equations")
     sm = store.update_subtopic_mastery(sm, True)
-    assert sm.mastery_score == 0.2  # 0.8*0 + 0.2*1
+    assert sm.mastery_score == 0.3  # 0 + 0.3*(1-0)
+
+
+def test_mastery_snaps_to_full_near_the_top():
+    # The asymptote fix: once a correct answer brings the score within the snap
+    # threshold, it reaches exactly 100% instead of crawling (…0.97, 0.976…).
+    sm = SubtopicMastery(topic="algebra", subtopic="linear_equations", mastery_score=0.94)
+    sm = store.update_subtopic_mastery(sm, True)  # 0.94 -> 0.958 -> snap 1.0
+    assert sm.mastery_score == 1.0
 
 
 # ── record_attempt updates both topic and subtopic ───────────────────────────
@@ -212,26 +224,47 @@ def test_selection_favors_weak_subtopic(monkeypatch, tmp_path):
     assert len(set(picks)) > 1
 
 
-def test_selection_difficulty_comes_from_subtopic(monkeypatch, tmp_path):
+def test_selection_difficulty_tracks_topic_mastery(monkeypatch, tmp_path):
     from src.agent import nodes
 
     monkeypatch.setattr(nodes, "STUDENT_STATE_DIR", tmp_path)
 
     state = StudentState.new("ramp_kid")
-    # Attempt every subtopic so cold-start/exploration won't pick a fresh one,
-    # and give the target a known elevated difficulty.
+    # Attempt every subtopic so cold-start/exploration won't pick a fresh one.
     for topic, subs in nodes.SUBTOPICS.items():
         for sub in subs:
             state.subtopic_mastery[subtopic_key(topic, sub)] = SubtopicMastery(
-                topic=topic, subtopic=sub, attempts=5, current_difficulty=2
+                topic=topic, subtopic=sub, attempts=5
             )
-    state.subtopic_mastery[subtopic_key("algebra", "linear_equations")].current_difficulty = 5
+    # Near-mastered on algebra: every algebra problem must be served at the top
+    # difficulty band, regardless of which subtopic is selected — so the student
+    # never drops back to "Easy" while the bar reads ~100%.
+    state.topic_mastery["algebra"] = TopicMastery(topic="algebra", mastery_score=0.99)
     store.save_student(state, tmp_path)
 
     random.seed(1)
+    saw_algebra = False
     for _ in range(200):
         result = nodes.select_topic_node({"student_id": "ramp_kid"})
-        if result["current_subtopic"] == "linear_equations":
-            assert result["current_difficulty"] == 5
-            return
-    raise AssertionError("linear_equations was never selected in 200 draws")
+        if result["current_topic"] == "algebra":
+            saw_algebra = True
+            assert result["current_difficulty"] == store.MAX_DIFFICULTY
+    assert saw_algebra, "algebra was never selected in 200 draws"
+
+
+# ── Deterministic on-topic fallback (no LLM) ─────────────────────────────────
+
+def test_fallback_problem_is_on_topic_and_valid_for_every_subtopic():
+    from src.agent import nodes
+
+    random.seed(3)
+    for topic, subs in nodes.SUBTOPICS.items():
+        for sub in subs:
+            for difficulty in (1, 3, 5):
+                result = nodes._fallback_problem(sub, difficulty, set())
+                assert result is not None, f"no fallback for {sub} @ d{difficulty}"
+                # On-topic (never the old off-topic "2 + 2") and answerable.
+                assert result["current_problem"]
+                assert result["current_problem"] != "$2 + 2 =$"
+                assert result["sympy_answer"] not in ("", None)
+                assert result["solution_steps"]  # a derivation was produced

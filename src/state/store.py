@@ -12,9 +12,14 @@ from .models import (
     subtopic_key,
 )
 
-# Difficulty ramp tuning. Difficulty rises only after sustained success at the
-# current level (not per-attempt jitter) and steps down immediately on a miss.
-RAMP_STREAK_THRESHOLD = 3
+# Mastery EMA tuning. A correct answer moves the score LEARNING_RATE of the way
+# toward 1.0; a wrong answer the same fraction toward 0.0. Once a correct answer
+# brings the score within (1 - MASTERY_SNAP_THRESHOLD) of full it snaps to 1.0,
+# so sustained success actually fills the bar instead of crawling asymptotically
+# (…0.97, 0.976, 0.981…) and stranding the student a few percent short forever.
+LEARNING_RATE = 0.3
+MASTERY_SNAP_THRESHOLD = 0.95
+
 MIN_DIFFICULTY = 1
 MAX_DIFFICULTY = 5
 
@@ -96,31 +101,39 @@ def record_attempt(
     return state
 
 
+def update_mastery_ema_score(old: float, is_correct: bool) -> float:
+    """One EMA step toward 1.0 (correct) or 0.0 (wrong), with a snap-to-full near
+    the top so a mastered skill reaches exactly 100% rather than approaching it
+    asymptotically."""
+    target = 1.0 if is_correct else 0.0
+    new = old + LEARNING_RATE * (target - old)
+    if is_correct and new >= MASTERY_SNAP_THRESHOLD:
+        new = 1.0
+    return max(0.0, min(1.0, new))
+
+
+def difficulty_for_mastery(score: float) -> int:
+    """Map a 0..1 mastery score onto the 1..5 difficulty band, so the problems a
+    student is served track the mastery they've demonstrated — the same signal as
+    the progress bar — instead of lagging behind it on a separate counter."""
+    band = int(score * 5) + 1  # [0,.2)->1, [.2,.4)->2, … [.8,1]->5
+    return max(MIN_DIFFICULTY, min(MAX_DIFFICULTY, band))
+
+
 def update_mastery_ema(mastery: TopicMastery, is_correct: bool) -> TopicMastery:
-    """Apply EMA update: new_score = 0.8 * old + 0.2 * (1.0 if correct else 0.0).
-    Also updates current_difficulty: +1 if correct, -1 if wrong, clamped [1,5]."""
-    mastery.mastery_score = 0.8 * mastery.mastery_score + 0.2 * (1.0 if is_correct else 0.0)
-    mastery.current_difficulty = max(1, min(5, mastery.current_difficulty + (1 if is_correct else -1)))
+    """Apply the mastery EMA and re-derive difficulty from the new score."""
+    mastery.mastery_score = update_mastery_ema_score(mastery.mastery_score, is_correct)
+    mastery.current_difficulty = difficulty_for_mastery(mastery.mastery_score)
     return mastery
 
 
 def update_subtopic_mastery(sm: SubtopicMastery, is_correct: bool) -> SubtopicMastery:
-    """EMA score plus a streak-gated difficulty ramp.
-
-    Difficulty rises only after RAMP_STREAK_THRESHOLD correct answers in a row at
-    the current level (then the streak resets, so each step up must be re-earned),
-    and steps down by one on any miss. This gives smooth, sustained progression on
-    weak subtopics instead of per-attempt jitter.
-    """
-    sm.mastery_score = 0.8 * sm.mastery_score + 0.2 * (1.0 if is_correct else 0.0)
-    if is_correct:
-        sm.consecutive_correct += 1
-        if sm.consecutive_correct >= RAMP_STREAK_THRESHOLD and sm.current_difficulty < MAX_DIFFICULTY:
-            sm.current_difficulty += 1
-            sm.consecutive_correct = 0
-    else:
-        sm.consecutive_correct = 0
-        sm.current_difficulty = max(MIN_DIFFICULTY, sm.current_difficulty - 1)
+    """Apply the mastery EMA and re-derive this subtopic's difficulty from it, so
+    mastery and difficulty move together. The running correct-streak is retained
+    for analytics but no longer gates difficulty."""
+    sm.mastery_score = update_mastery_ema_score(sm.mastery_score, is_correct)
+    sm.consecutive_correct = sm.consecutive_correct + 1 if is_correct else 0
+    sm.current_difficulty = difficulty_for_mastery(sm.mastery_score)
     return sm
 
 

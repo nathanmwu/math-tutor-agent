@@ -164,7 +164,7 @@ def main_page():
                 ui.label("Adaptive K-12 practice").classes("text-xs text-slate-400")
                 return
             name = session["student_id"].replace("_", " ").title()
-            ui.label(f"👋 {name}").classes("text-lg font-semibold text-slate-700")
+            ui.label(name).classes("text-lg font-semibold text-slate-700")
             ui.label(f"Attempts this session: {session['attempts']}").classes(
                 "text-xs text-slate-500"
             )
