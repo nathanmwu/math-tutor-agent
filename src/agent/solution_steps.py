@@ -2,8 +2,10 @@
 
 The LLM never writes math steps: every derivation shown to a student is
 generated here, and every displayed equality is verified symbolically before
-it is emitted. If any internal check fails, the builder falls back to a
-single `expression = result` step — minimal, but provably correct.
+it is emitted. Every derivation leads with a bare restatement of the problem,
+then applies one operation per step. If a structured builder can't decompose
+the input, the generic fallback shows restatement + result — minimal, but
+provably correct.
 """
 from __future__ import annotations
 
@@ -25,14 +27,25 @@ def _frac(n, d) -> str:
     return rf"\frac{{{latex(n)}}}{{{latex(d)}}}"
 
 
-def _verified_chain(*pairs) -> str:
-    """Build '$a = b = c$' from (latex, value) pairs, verifying every
-    adjacent equality symbolically before emitting."""
-    values = [value for _, value in pairs]
-    for left, right in zip(values, values[1:]):
-        if simplify(left - right) != 0:
-            raise _StepCheckError(f"{left} != {right}")
-    return "$" + " = ".join(text for text, _ in pairs) + "$"
+def _running_steps(*pairs) -> list[str]:
+    """One numbered step per (latex, value) state, in order.
+
+    The first step is the bare restatement of the problem; every later step
+    applies a single operation to the previous one. Each consecutive pair of
+    concrete numeric values is verified equal before display, preserving the
+    "every emitted equality is symbolically true" guarantee. A state with value
+    ``None`` (a formula or templated restatement that does not evaluate to a
+    number — e.g. ``m = (y_2 - y_1)/(x_2 - x_1)``) is emitted verbatim and skips
+    the check."""
+    steps: list[str] = []
+    prev = None
+    for text, value in pairs:
+        if prev is not None and value is not None and simplify(prev - value) != 0:
+            raise _StepCheckError(f"{prev} != {value}")
+        steps.append(f"${text}$")
+        if value is not None:
+            prev = value
+    return steps
 
 
 def _rational_latex(r: Rational) -> str:
@@ -137,11 +150,16 @@ def slope_solution_steps(p1: tuple[int, int], p2: tuple[int, int]) -> list[str]:
     raw = _frac(num_raw, den_raw)
     reduced = _rational_latex(slope)
 
-    pairs = [(substituted, slope), (raw, slope)]
-    if raw != reduced:  # skip the trailing step when already in lowest terms
-        pairs.append((reduced, slope))
-    body = _verified_chain(*pairs).strip("$")
-    return [rf"$m = \frac{{y_2 - y_1}}{{x_2 - x_1}} = {body}$"]
+    # Step 1 restates the formula (the math setup); each later step applies one
+    # operation: substitute the points, evaluate, then reduce.
+    states = [
+        (r"m = \frac{y_2 - y_1}{x_2 - x_1}", None),
+        (rf"m = {substituted}", slope),
+        (rf"m = {raw}", slope),
+    ]
+    if raw != reduced:  # skip the reduction step when already in lowest terms
+        states.append((rf"m = {reduced}", slope))
+    return _running_steps(*states)
 
 
 def linear_eval_solution_steps(m: int, k: int, v: int) -> list[str]:
@@ -160,12 +178,14 @@ def linear_eval_solution_steps(m: int, k: int, v: int) -> list[str]:
     substituted = rf"{latex(m)}({latex(v)}) {_plus(k)}"
     arithmetic = rf"{latex(m * v)} {_plus(k)}"
 
-    body = _verified_chain(
-        (substituted, answer),
-        (arithmetic, answer),
-        (latex(answer), answer),
-    ).strip("$")
-    return [rf"$y = {formula} = {body}$"]
+    # Step 1 restates the given equation; each later step applies one operation:
+    # substitute x, multiply, then add.
+    return _running_steps(
+        (rf"y = {formula}", None),
+        (rf"y = {substituted}", answer),
+        (rf"y = {arithmetic}", answer),
+        (rf"y = {latex(answer)}", answer),
+    )
 
 
 # ── Fraction arithmetic ───────────────────────────────────────────────────────
@@ -189,7 +209,9 @@ def _fraction_add_steps(expr) -> list[str]:
     total = r1 + r2
     original = _terms_latex(terms)
 
-    steps = []
+    # Step 1 restates the sum; each later step applies one operation: rewrite
+    # over a common denominator, add numerators, then reduce.
+    states = [(original, total)]
     if r1.q == r2.q:
         d = r1.q
         combined_n = r1.p + r2.p
@@ -199,23 +221,13 @@ def _fraction_add_steps(expr) -> list[str]:
         sign1 = "-" if c1 < 0 else ""
         sign2 = "- " if c2 < 0 else "+ "
         converted = f"{sign1}{_frac(abs(c1), d)} {sign2}{_frac(abs(c2), d)}"
-        steps.append(_verified_chain(
-            (original, total),
-            (converted, Rational(c1, d) + Rational(c2, d)),
-        ))
-        original = converted
+        states.append((converted, Rational(c1, d) + Rational(c2, d)))
         combined_n = c1 + c2
 
-    steps.append(_verified_chain(
-        (original, total),
-        (_frac(combined_n, d), Rational(combined_n, d)),
-    ))
+    states.append((_frac(combined_n, d), Rational(combined_n, d)))
     if (total.p, total.q) != (combined_n, d):
-        steps.append(_verified_chain(
-            (_frac(combined_n, d), total),
-            (_rational_latex(total), total),
-        ))
-    return steps
+        states.append((_rational_latex(total), total))
+    return _running_steps(*states)
 
 
 def _fraction_mul_steps(expr) -> list[str]:
@@ -241,18 +253,14 @@ def _fraction_mul_steps(expr) -> list[str]:
         raise _StepCheckError("integer product — generic step reads better")
     total = simplify(expr)
 
-    steps = []
+    # Step 1 restates the product/quotient; each later step applies one
+    # operation: (for division) invert and multiply, cross-multiply, then reduce.
     if k2 == "div":
-        # division: invert and multiply
-        original = rf"{_rational_latex(f1)} \div {_rational_latex(f2)}"
+        states = [(rf"{_rational_latex(f1)} \div {_rational_latex(f2)}", total)]
         f2 = Rational(f2.q, f2.p)  # reciprocal (sign carried by p)
-        steps.append(_verified_chain(
-            (original, total),
-            (rf"{_rational_latex(f1)} \times {_rational_latex(f2)}", f1 * f2),
-        ))
-        original = rf"{_rational_latex(f1)} \times {_rational_latex(f2)}"
+        states.append((rf"{_rational_latex(f1)} \times {_rational_latex(f2)}", f1 * f2))
     else:
-        original = rf"{_rational_latex(f1)} \times {_rational_latex(f2)}"
+        states = [(rf"{_rational_latex(f1)} \times {_rational_latex(f2)}", total)]
 
     raw_n = f1.p * f2.p
     raw_d = f1.q * f2.q
@@ -260,24 +268,20 @@ def _fraction_mul_steps(expr) -> list[str]:
         rf"\frac{{{latex(Integer(f1.p))} \times {latex(Integer(f2.p))}}}"
         rf"{{{latex(Integer(f1.q))} \times {latex(Integer(f2.q))}}}"
     )
-    steps.append(_verified_chain(
-        (original, total),
-        (cross, Rational(raw_n, raw_d)),
-        (_frac(raw_n, raw_d), Rational(raw_n, raw_d)),
-    ))
+    states.append((cross, Rational(raw_n, raw_d)))
+    states.append((_frac(raw_n, raw_d), Rational(raw_n, raw_d)))
     if (total.p, total.q) != (raw_n, raw_d):
-        steps.append(_verified_chain(
-            (_frac(raw_n, raw_d), total),
-            (_rational_latex(total), total),
-        ))
-    return steps
+        states.append((_rational_latex(total), total))
+    return _running_steps(*states)
 
 
 # ── Generic fallback ──────────────────────────────────────────────────────────
 
 def _generic_steps(expression: str) -> list[str]:
-    """Single `expression = result` step. Always correct; used when the
-    structured builders cannot handle the input."""
+    """Restatement + answer (two steps). Used when the structured builders
+    cannot decompose the input further: step 1 restates the problem, step 2
+    gives the result. Collapses to a single step only when the input is already
+    fully simplified (nothing to derive)."""
     try:
         value = sympify(expression, locals={"Rational": Rational, "Eq": Eq}, rational=True)
         if isinstance(value, list):
@@ -292,7 +296,10 @@ def _generic_steps(expression: str) -> list[str]:
             solutions = solve(value, x)
             if len(solutions) != 1:
                 return []
-            return [f"${latex(x)} = {latex(solutions[0])}$"]
+            return [
+                f"${latex(value.lhs)} = {latex(value.rhs)}$",
+                f"${latex(x)} = {latex(solutions[0])}$",
+            ]
         if value.free_symbols or not value.is_number:
             return []
         try:
@@ -303,7 +310,7 @@ def _generic_steps(expression: str) -> list[str]:
         result = simplify(value)
         if display == latex(result):
             return [f"${display}$"]
-        return [_verified_chain((display, value), (latex(result), result))]
+        return _running_steps((display, value), (latex(result), result))
     except Exception:
         return []
 

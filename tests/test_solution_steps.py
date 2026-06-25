@@ -22,30 +22,29 @@ from src.agent.solution_steps import (
 
 def test_slope_negative_coordinates_reported_case():
     # The exact problem that previously produced a wrong stored answer (3/7):
-    # the derivation must show the substitution and reduce to -5/7.
+    # the derivation must restate the formula, show the substitution, and reduce
+    # to -5/7 — one operation per step.
     steps = slope_solution_steps((-2, 4), (5, -1))
-    assert len(steps) == 1
-    step = steps[0]
-    assert r"\frac{y_2 - y_1}{x_2 - x_1}" in step      # formula shown
-    assert r"\frac{-1 - 4}{5 - (-2)}" in step          # substitution, signs intact
-    assert step.endswith(r"-\frac{5}{7}$")             # reduced answer
+    assert steps[0] == r"$m = \frac{y_2 - y_1}{x_2 - x_1}$"     # restatement / formula
+    assert any(r"\frac{-1 - 4}{5 - (-2)}" in s for s in steps)  # substitution, signs intact
+    assert steps[-1].endswith(r"-\frac{5}{7}$")                # reduced answer
 
 
 def test_slope_integer_result_shows_reduction():
     steps = slope_solution_steps((0, 0), (2, 6))
-    assert r"\frac{6 - 0}{2 - 0}" in steps[0]
-    assert r"\frac{6}{2}" in steps[0]
-    assert steps[0].endswith("= 3$")
+    assert any(r"\frac{6 - 0}{2 - 0}" in s for s in steps)
+    assert any(r"\frac{6}{2}" in s for s in steps)
+    assert steps[-1].endswith("= 3$")
 
 
 def test_slope_already_reduced_omits_trailing_step():
     # 9/3 reduces to 3 (shown), but a slope already in lowest terms must not
-    # append a redundant identical step.
+    # append a redundant identical reduction step.
     steps = slope_solution_steps((1, 2), (4, 5))   # (5-2)/(4-1) = 3/3 -> 1
-    assert steps[0].endswith("= 1$")
+    assert steps[-1].endswith("= 1$")
     steps = slope_solution_steps((1, 1), (3, 2))   # (2-1)/(3-1) = 1/2, already reduced
-    assert steps[0].count("=") == 3                # formula = sub = raw  (no extra)
-    assert steps[0].endswith(r"\frac{1}{2}$")
+    assert len(steps) == 3                          # formula, substitution, raw (no reduce)
+    assert steps[-1].endswith(r"\frac{1}{2}$")
 
 
 def test_slope_vertical_line_raises():
@@ -57,12 +56,12 @@ def test_slope_vertical_line_raises():
 
 def test_linear_eval_basic():
     steps = linear_eval_solution_steps(2, 1, 3)
-    assert steps == ["$y = 2x + 1 = 2(3) + 1 = 6 + 1 = 7$"]
+    assert steps == ["$y = 2x + 1$", "$y = 2(3) + 1$", "$y = 6 + 1$", "$y = 7$"]
 
 
 def test_linear_eval_unit_and_negative_coefficients():
     steps = linear_eval_solution_steps(-1, -3, 4)
-    assert steps == ["$y = -x - 3 = -1(4) - 3 = -4 - 3 = -7$"]
+    assert steps == ["$y = -x - 3$", "$y = -1(4) - 3$", "$y = -4 - 3$", "$y = -7$"]
 
 
 # ── Linear equations ──────────────────────────────────────────────────────────
@@ -114,20 +113,22 @@ def test_fractional_solution():
 
 def test_fraction_addition_different_denominators():
     steps = generate_solution_steps("Rational(1,6) + Rational(2,3)")
-    assert len(steps) == 2
-    assert "\\frac{4}{6}" in steps[0]            # converted to the LCD
-    assert steps[1].endswith("\\frac{5}{6}$")
+    assert steps[0] == r"$\frac{1}{6} + \frac{2}{3}$"   # bare restatement first
+    assert "\\frac{4}{6}" in steps[1]                   # converted to the LCD
+    assert steps[-1].endswith("\\frac{5}{6}$")
 
 
 def test_fraction_addition_same_denominator_with_simplification():
     steps = generate_solution_steps("Rational(3,8) + Rational(1,8)")
-    assert "\\frac{4}{8}" in steps[0]
+    assert steps[0] == r"$\frac{3}{8} + \frac{1}{8}$"   # bare restatement first
+    assert any("\\frac{4}{8}" in s for s in steps)
     assert steps[-1].endswith("\\frac{1}{2}$")
 
 
 def test_fraction_subtraction():
     steps = generate_solution_steps("Rational(3,4) - Rational(1,6)")
-    assert "\\frac{9}{12}" in steps[0] and "\\frac{2}{12}" in steps[0]
+    assert steps[0] == r"$\frac{3}{4} - \frac{1}{6}$"   # bare restatement first
+    assert "\\frac{9}{12}" in steps[1] and "\\frac{2}{12}" in steps[1]
     assert steps[-1].endswith("\\frac{7}{12}$")
 
 
@@ -140,19 +141,21 @@ def test_fraction_addition_integer_result():
 
 def test_fraction_multiplication():
     steps = generate_solution_steps("Rational(3,4) * Rational(2,5)")
-    assert "3 \\times 2" in steps[0] and "4 \\times 5" in steps[0]
+    assert steps[0] == r"$\frac{3}{4} \times \frac{2}{5}$"   # bare restatement first
+    assert any("3 \\times 2" in s and "4 \\times 5" in s for s in steps)
     assert steps[-1].endswith("\\frac{3}{10}$")
 
 
 def test_fraction_multiplication_needs_simplification():
     steps = generate_solution_steps("Rational(2,3) * Rational(3,4)")
-    assert "\\frac{6}{12}" in steps[0]
+    assert any("\\frac{6}{12}" in s for s in steps)
     assert steps[-1].endswith("\\frac{1}{2}$")
 
 
 def test_fraction_division():
     steps = generate_solution_steps("Rational(1,2) / Rational(3,4)")
-    assert "\\div" in steps[0] and "\\times \\frac{4}{3}" in steps[0]
+    assert "\\div" in steps[0]                               # restate the quotient
+    assert any("\\times \\frac{4}{3}" in s for s in steps)   # invert and multiply
     assert steps[-1].endswith("\\frac{2}{3}$")
 
 
@@ -160,14 +163,15 @@ def test_fraction_division():
 
 def test_integer_product_uses_generic_step():
     steps = generate_solution_steps("3 * 4")
-    assert len(steps) == 1
-    assert steps[0].endswith("= 12$")
+    assert len(steps) == 2                       # restatement + answer
+    assert steps[0] == "$3 \\cdot 4$"
+    assert steps[-1].endswith("12$")
 
 
 def test_three_factor_product_falls_back():
     steps = generate_solution_steps("Rational(1,2) * 6 * 4")
-    assert len(steps) == 1
-    assert steps[0].endswith("= 12$")
+    assert len(steps) == 2                       # restatement + answer
+    assert steps[-1].endswith("12$")
 
 
 def test_garbage_input_is_safe():
