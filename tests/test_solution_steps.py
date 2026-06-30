@@ -9,11 +9,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
-from sympy import simplify
+from sympy import Integer, simplify, sympify
 
-from src.agent.solution_steps import (
+from src.solution_steps import (
     generate_solution_steps,
     linear_eval_solution_steps,
+    poly_eval_solution_steps,
+    polynomial_latex,
     slope_solution_steps,
 )
 
@@ -228,3 +230,25 @@ def test_all_numeric_equalities_hold(expression):
             assert simplify(left - right) == 0, (
                 f"step {step!r} contains a false equality: {left} != {right}"
             )
+
+
+# ── Evaluating expressions (substitute a value into a polynomial) ─────────────
+
+@pytest.mark.parametrize("coeffs,v", [
+    ([-2, 3, 1], -8),    # the reported regression: 3x - 2x^2 + 1 at x=-8  ->  -151
+    ([8, -14, 7], 23),
+    ([1, 0, -5], 4),     # x^2 - 5 at x=4  ->  11   (a missing middle term)
+    ([5, 3], 4),         # linear: 5x + 3 at x=4  ->  23
+    ([-3, -8, 5], -9),
+])
+def test_poly_eval_steps(coeffs, v):
+    d = len(coeffs) - 1
+    expected = sum(Integer(c) * Integer(v) ** (d - i) for i, c in enumerate(coeffs))
+    steps = poly_eval_solution_steps(coeffs, v)
+    # starts from the displayed problem expression
+    assert steps[0] == f"${polynomial_latex(coeffs, 'x')}$"
+    # shows the substitution, not a bare jump to the answer
+    assert len(steps) >= 3
+    assert f"({v})" in steps[1]
+    # ends at the correct, verified answer
+    assert sympify(steps[-1].strip("$")) == expected

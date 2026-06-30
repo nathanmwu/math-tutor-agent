@@ -1,10 +1,12 @@
 """Tests for symbolic_check() and the answer evaluation pipeline."""
+import re
 import sys
+from math import gcd
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.agent.nodes import symbolic_check
+from src.pipeline import symbolic_check
 
 
 # ── Exact match ───────────────────────────────────────────────────────────────
@@ -188,6 +190,41 @@ def test_large_integer():
 def test_fraction_with_spaces():
     # "3 / 4" — SymPy should parse this
     assert symbolic_check("3 / 4", "3/4") is True
+
+
+# ── Percent sign stripped ("what percent" answers) ────────────────────────────
+
+def test_percent_sign_accepted():
+    assert symbolic_check("50%", "50") is True
+
+
+# ── equivalent_fractions subtopic: answer must be in lowest terms ──────────────
+# evaluate_answer_node layers a gcd check on top of symbolic_check for this
+# subtopic; these mirror that combined logic.
+
+def _equiv_frac_check(student_answer: str, sympy_answer: str) -> bool | None:
+    result = symbolic_check(student_answer, sympy_answer)
+    if result:
+        m = re.match(r"^\s*(\d+)\s*/\s*(\d+)\s*$", student_answer.strip())
+        if m and gcd(int(m.group(1)), int(m.group(2))) != 1:
+            result = False
+    return result
+
+
+def test_equiv_frac_reduced_accepted():
+    assert _equiv_frac_check("3/4", "3/4") is True
+
+def test_equiv_frac_unreduced_rejected():
+    # 36/48 is numerically correct (== 3/4) but not reduced — must be rejected
+    assert _equiv_frac_check("36/48", "3/4") is False
+
+def test_equiv_frac_partially_reduced_rejected():
+    # 6/8 simplifies to 3/4 but still has gcd=2 — also wrong
+    assert _equiv_frac_check("6/8", "3/4") is False
+
+def test_equiv_frac_decimal_accepted():
+    # Decimals bypass the fraction-form check (user typed 0.75, not a/b)
+    assert _equiv_frac_check("0.75", "3/4") is True
 
 
 if __name__ == "__main__":

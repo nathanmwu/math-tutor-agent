@@ -11,7 +11,7 @@ from nicegui.testing import User
 
 pytest_plugins = ["nicegui.testing.user_plugin"]
 
-@pytest.mark.nicegui_main_file(str(Path(__file__).parent.parent / "src" / "ui" / "app.py"))
+@pytest.mark.nicegui_main_file(str(Path(__file__).parent.parent / "src" / "ui.py"))
 @pytest.mark.asyncio
 async def test_name_gate_to_problem(user: User) -> None:
     await user.open("/")
