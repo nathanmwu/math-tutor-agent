@@ -6,12 +6,6 @@ Built as a portfolio project demonstrating RAG, a stateful LangGraph agent loop,
 
 ---
 
-## What It Does
-
-Each turn: pick the student's weakest subtopic → generate a problem in pure LaTeX notation (e.g. $\frac{1}{6} + \frac{2}{3} =$) → the student answers (any equivalent form accepted: `1/2`, `0.5`, `2/4`) → SymPy checks it → retrieve a relevant explanation → show a SymPy-verified solution plus a short concept note → update mastery and difficulty → next problem.
-
----
-
 ## Quick Start
 
 **Prerequisites**: Python 3.12, [Ollama](https://ollama.com) running.
@@ -29,7 +23,10 @@ Open http://localhost:8501, enter your name, and start practicing.
 
 ---
 
-## How It Works
+## Pipeline Overview
+
+Each turn: pick the student's weakest subtopic → generate a problem in pure LaTeX notation (e.g. $\frac{1}{6} + \frac{2}{3} =$) → the student answers (any equivalent form accepted: `1/2`, `0.5`, `2/4`) → SymPy checks it → retrieve a relevant explanation → show a SymPy-verified solution plus a short concept note → update mastery and difficulty → next problem.
+
 
 A LangGraph state machine drives each turn as five nodes, with one pause for the student's answer:
 
