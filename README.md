@@ -30,9 +30,7 @@ Each turn: pick the student's weakest subtopic → generate a problem in pure La
 
 A LangGraph state machine drives each turn as five nodes, with one pause for the student's answer:
 
-```
-setup → generate_problem → [PAUSE: student answers] → evaluate_answer → explain → update_state
-```
+![LangGraph pipeline](docs/graph.png)
 
 - **setup** — load the student, pick the weakest subtopic, set difficulty from mastery
 - **generate_problem** — Ollama writes a LaTeX problem plus a SymPy expression; the expression is evaluated locally (the LLM's arithmetic is never trusted), and a SymPy-verified derivation is precomputed
