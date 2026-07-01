@@ -9,7 +9,7 @@ import os
 
 load_dotenv()
 
-from src.knowledge.loader import load_knowledge_base
+from src.knowledge import load_knowledge_base
 
 KB_DIR = Path(os.getenv("KNOWLEDGE_BASE_DIR", "data/knowledge_base"))
 CHROMA_DIR = Path(os.getenv("CHROMADB_PATH", "data/chromadb"))

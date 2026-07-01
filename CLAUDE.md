@@ -2,12 +2,7 @@
 
 ## Project Purpose
 
-This is a portfolio project demonstrating core AI engineering techniques in the context of K-12 math tutoring. It is designed to be:
-
-1. **Educational for the builder** — each component deliberately exposes one AI technique so the implementation teaches as much as the outcome.
-2. **Legible to EdTech engineering teams** (e.g., IXL Learning) — architectural decisions are explicit, documented, and defensible in an interview context.
-
-The system is not trying to be production-scale. It is trying to be *correct*, *clear*, and *complete* as a demonstration of technique.
+A portfolio project demonstrating core AI-engineering techniques in a K-12 math tutor. The goal is to be *correct*, *clear*, and *complete* as a demonstration of technique — not production-scale. Each component deliberately exposes one technique (RAG, an agentic loop, symbolic verification, adaptive state) so the implementation is legible and defensible in an interview context.
 
 ---
 
@@ -15,13 +10,13 @@ The system is not trying to be production-scale. It is trying to be *correct*, *
 
 | Technique | Where in the codebase | Why it's here |
 |---|---|---|
-| **RAG (Retrieval-Augmented Generation)** | `src/knowledge/` + `src/agent/nodes.py:retrieve_explanation` | Grounds LLM feedback in verified educational content rather than parametric memory |
-| **Agentic loop with tool use** | `src/agent/graph.py` | LangGraph StateGraph drives a deterministic sequence: generate → pause → evaluate → retrieve → feedback → adapt → END. The UI advances to the next turn explicitly. |
-| **Adaptive behavior** | `src/agent/nodes.py:adapt_next` + `src/state/` | Student mastery tracked per topic via EMA; difficulty and topic selection adjust each turn |
-| **Persistent student state** | `src/state/models.py` + `data/students/` | Pydantic models serialized to per-student JSON; survives session restarts |
-| **Symbolic answer verification** | `src/agent/nodes.py:evaluate_answer` via SymPy | Deterministic math evaluation — right/wrong is never delegated to an LLM |
-| **Verified solution steps** | `src/agent/solution_steps.py` | The displayed derivation is SymPy-generated; every emitted equality is symbolically checked before display. The LLM only writes a short concept note |
-| **Structured LLM output** | `src/agent/prompts.py` + `nodes.py:_parse_problem_json` | Problem generation returns validated JSON (`problem_text` in LaTeX, `sympy_expression`, `topic`, `subtopic`); a repair layer fixes LaTeX-in-JSON escaping corruption |
+| **RAG (Retrieval-Augmented Generation)** | `src/knowledge.py` + `src/pipeline.py:explain_node` | Grounds LLM feedback in verified educational content rather than parametric memory |
+| **Agentic loop** | `src/pipeline.py` | A LangGraph StateGraph drives a fixed sequence: setup → generate → pause → evaluate → explain → update → END. The UI advances to the next turn explicitly. |
+| **Adaptive behavior** | `src/pipeline.py:setup_node` + `src/student.py` | Mastery tracked per subtopic via EMA; difficulty and topic selection adjust each turn |
+| **Persistent student state** | `src/student.py` + `data/students/` | Pydantic models serialized to per-student JSON; survives session restarts |
+| **Symbolic answer verification** | `src/pipeline.py:evaluate_answer_node` via SymPy | Deterministic math evaluation — right/wrong is never delegated to an LLM |
+| **Verified solution steps** | `src/solution_steps.py` | The displayed derivation is SymPy-generated; every emitted equality is checked symbolically before display. The LLM only writes a short concept note |
+| **Structured LLM output** | `src/prompts.py` + `src/pipeline.py:_parse_problem_json` | Problem generation returns validated JSON; a repair layer fixes LaTeX-in-JSON escaping corruption |
 
 ---
 
@@ -30,43 +25,35 @@ The system is not trying to be production-scale. It is trying to be *correct*, *
 ```
 NiceGUI UI (single process, event-driven; KaTeX renders $...$ LaTeX)
     ↕ graph.stream (in-process, consumed via run.io_bound)
-LangGraph StateGraph (TutorState)
-    ├── load_state         → reads data/students/{id}.json
-    ├── select_topic       → weakest topic or next curriculum slot
-    ├── generate_problem   → Ollama (llama3.1:8b) → pure-notation LaTeX problem JSON;
-    │                         _parse_problem_json repairs escaping; SymPy evaluates expression
-    ├── [PAUSE]            → UI renders problem, student submits answer
-    ├── evaluate_answer    → SymPy symbolic check (deterministic)
-    │                         + Ollama error categorization (wrong only, internal)
-    ├── retrieve_explanation → ChromaDB RAG (problem text as semantic query)
-    ├── generate_feedback  → Ollama with retrieved chunks; 2-3 sentence concept
-    │                         note only — the derivation comes from solution_steps
-    │                         (SymPy-verified, computed in generate_problem)
-    ├── update_state       → EMA mastery update + write JSON
-    └── adapt_next         → sets next difficulty/topic → END
-                              UI shows feedback; "Next problem" triggers a new turn from load_state
+LangGraph StateGraph (TutorState) — src/pipeline.py
+    ├── setup            → load student, pick weakest subtopic, set difficulty from mastery
+    ├── generate_problem → Ollama (llama3.1:8b) → pure-notation LaTeX problem JSON;
+    │                       _parse_problem_json repairs escaping; SymPy evaluates the
+    │                       expression and precomputes the verified derivation
+    ├── [PAUSE]          → UI renders problem, student submits answer
+    ├── evaluate_answer  → SymPy symbolic check (deterministic)
+    │                       + Ollama error categorization (wrong only, internal)
+    ├── explain          → ChromaDB RAG (problem text as semantic query) + Ollama;
+    │                       2-3 sentence concept note grounded in the retrieved chunks
+    │                       (the derivation comes from solution_steps, not the LLM)
+    └── update_state     → EMA mastery update + write JSON → END
+                            UI shows feedback; "Next problem" starts a fresh turn at setup
 ```
 
-Full system design: see [architecture.md](architecture.md).
-Full requirements and API contracts: see [project_spec.md](project_spec.md).
+The pipeline is five nodes with one human-in-the-loop pause. Next-turn difficulty is recomputed in `setup` from the freshly-saved mastery, so there is no separate "adapt" step.
+
+Full system design: see [architecture.md](architecture.md). Requirements/API contracts: see [project_spec.md](project_spec.md).
 
 ---
 
 ## Key Design Decisions
 
-**LangGraph over LangChain AgentExecutor** — The tutoring loop is a well-defined state machine, not an open-ended ReAct loop. An explicit graph is easier to reason about, test, and explain. Contrast with the `network-recommendation-engine` project which uses `create_tool_calling_agent` — that project has an open-ended query pattern; this one does not.
-
-**SymPy for answer evaluation** — LLM evaluation of math answers has unacceptable failure modes (marking correct answers wrong; accepting wrong answers). SymPy compares symbolic expressions deterministically. LLM is still used for error categorization, which is a qualitative task it handles well.
-
-**ChromaDB for local vector store** — No Docker, no server, `PersistentClient(path=...)` in-process. The knowledge base is ~45 hand-authored chunks across two topics (fractions & ratios, algebra); ChromaDB scales comfortably well beyond that.
-
-**EMA mastery over Bayesian Knowledge Tracing** — BKT requires per-skill parameter estimation and training data. EMA (`0.8 * old + 0.2 * new`) is transparent, correct in direction, and sufficient for demonstrating adaptive behavior. BKT is noted in the README as the production path.
-
-**Pydantic + JSON over SQLite** — Human-readable, git-friendly, zero infrastructure. One file per student eliminates locking. SQLite is a trivial upgrade if cross-student querying becomes needed.
-
-**NiceGUI over Streamlit / React+shadcn** — Streamlit's rerun-per-interaction model was too slow; a React frontend would force a backend API split, Node toolchain, and two processes. NiceGUI is event-driven, single-process, pip-only, and calls the graph in-process. LaTeX is rendered by KaTeX (`src/ui/app.py:KATEX_HEAD`), scoped strictly to `.math-content` divs — NEVER run KaTeX on `document.body`: its text-node scan destroys Vue's empty-text-node fragment anchors and freezes the UI. Trigger typesetting via the `page_client` handle captured at page build (ambient client context is lost after `await` in handlers).
-
-**Pure-notation problems over word problems** — Problems are written purely mathematically (`$\frac{1}{6} + \frac{2}{3} =$`, `$3x - 9 = 12$, $x = ?$`). Word problems let the story and the math drift apart (the source of past answer-mismatch bugs); pure notation keeps `problem_text` and `sympy_expression` two views of the same object. The one deliberate exception is **percentages**, which use two fixed question templates (`"What is $P\%$ of $N$?"`, `"$M$ is what percent of $N$?"`) — these are deterministic, so they map cleanly to a SymPy computation without drift. The current generator only emits problems with a concrete numeric answer (`generate_problem_node`'s `is_number` gate), so every subtopic must resolve to a number or an `Eq` that solves to one.
+- **SymPy for answer evaluation and derivations** — LLM math checking marks correct answers wrong and accepts wrong ones; SymPy compares symbolic expressions deterministically. Derivations are SymPy-generated with every equality verified before display. The LLM is used only where natural language fits: problem generation, error categorization, and the concept note.
+- **LangGraph for the loop** — The session is a fixed state machine, not an open-ended ReAct loop. `MemorySaver` + `interrupt_before=["evaluate_answer_node"]` give the pause/resume the UI needs without threading.
+- **ChromaDB for RAG** — Local `PersistentClient`, no server. Metadata filters (topic/subtopic/difficulty/misconception) keep retrieval relevant to the specific problem and error.
+- **Pydantic + JSON state** — Human-readable, git-friendly, one file per student.
+- **NiceGUI + KaTeX** — Single event-driven process calling the graph in-process. KaTeX is scoped strictly to `.math-content` divs — NEVER run it on `document.body`: its text-node scan destroys Vue's empty-text-node fragment anchors and freezes the UI. Typesetting is triggered via the `page_client` handle captured at page build (ambient client context is lost after `await` in handlers).
+- **Pure-notation problems** — Problems are written mathematically (`$\frac{1}{6} + \frac{2}{3} =$`), so `problem_text` and `sympy_expression` are two views of one object. The generator only emits problems with a concrete numeric answer (the `is_number` gate).
 
 ---
 
@@ -75,15 +62,9 @@ Full requirements and API contracts: see [project_spec.md](project_spec.md).
 ```bash
 # Prerequisites: Python 3.12, Ollama running with llama3.1:8b pulled
 ollama pull llama3.1:8b
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Populate the knowledge base (run once)
-python scripts/ingest_kb.py
-
-# Start the app (single process — serves http://localhost:8501)
-python src/ui/app.py
+python scripts/ingest_kb.py     # populate the knowledge base (run once)
+python src/ui.py                # single process — serves http://localhost:8501
 ```
 
 ---
@@ -92,46 +73,33 @@ python src/ui/app.py
 
 ```
 Tutor-Agent/
-├── CLAUDE.md              ← this file
-├── README.md
-├── project_spec.md        ← full requirements and API contracts
-├── architecture.md        ← system design and data flow
-├── requirements.txt
-├── .env.example
-├── scripts/
-│   └── ingest_kb.py       # one-time KB ingestion
+├── CLAUDE.md / README.md / architecture.md / project_spec.md
+├── requirements.txt / .env.example
+├── scripts/ingest_kb.py        # one-time KB ingestion
 ├── data/
-│   ├── knowledge_base/    # source JSON chunks (version-controlled)
-│   │   ├── fractions_ratios.json
-│   │   └── algebra.json
-│   ├── chromadb/          # ChromaDB persistence (gitignored)
-│   └── students/          # per-student state JSON (gitignored)
+│   ├── knowledge_base/         # source JSON chunks (version-controlled)
+│   ├── chromadb/               # ChromaDB persistence (gitignored)
+│   └── students/               # per-student state JSON (gitignored)
 └── src/
-    ├── knowledge/
-    │   ├── loader.py       # ingest data/knowledge_base/ → ChromaDB
-    │   └── retriever.py    # retrieve(topic, subtopic, difficulty, error_category)
-    ├── state/
-    │   ├── models.py       # Pydantic: AttemptRecord, TopicMastery, StudentState
-    │   └── store.py        # load_student(), save_student()
-    ├── agent/
-    │   ├── graph.py        # StateGraph definition
-    │   ├── nodes.py        # all node functions
-    │   ├── solution_steps.py  # SymPy-verified derivations
-    │   └── prompts.py      # all prompt templates
-    └── ui/
-        └── app.py          # NiceGUI app (KaTeX rendering, live op feed)
+    ├── pipeline.py             # TutorState + the 5-node graph + symbolic_check()
+    ├── prompts.py              # all LLM prompt templates
+    ├── solution_steps.py       # SymPy-verified derivations
+    ├── student.py              # Pydantic models + persistence + EMA mastery
+    ├── knowledge.py            # ChromaDB ingest + retrieval (RAG)
+    └── ui.py                   # NiceGUI app (KaTeX rendering, live op feed)
 ```
 
 ---
 
 ## Conventions
 
-- All LLM calls go through `src/agent/nodes.py` — never call Ollama directly from the UI or retriever.
-- All prompt templates live in `src/agent/prompts.py` — never embed prompt strings inline.
-- All student state mutations go through `src/state/store.py` — never write JSON directly from a node.
-- SymPy evaluation lives in `src/agent/nodes.py:symbolic_check()` — keep it isolated so it's easy to swap or extend.
+- All LLM calls go through `src/pipeline.py` (via `_get_llm()`) — never call Ollama directly from the UI or knowledge layer.
+- All prompt templates live in `src/prompts.py` — never embed prompt strings inline.
+- All student state mutations go through `src/student.py` — never write JSON directly from a node.
+- SymPy evaluation lives in `src/pipeline.py:symbolic_check()` — keep it isolated so it's easy to swap or extend.
 - Knowledge base source files in `data/knowledge_base/` are the source of truth — re-run `ingest_kb.py` if ChromaDB is deleted.
-- The UI (`src/ui/app.py`) only touches `src/agent/graph.py` — never import nodes, store, or retriever from the UI.
-- All math shown to the student is LaTeX wrapped in `$...$` — problems are pure notation (no word problems); the error category is never displayed.
-- Solution derivations are SymPy-generated (`src/agent/solution_steps.py`) and rendered verbatim — the LLM never writes math steps. Every displayed equality must pass symbolic verification before it is emitted; unverifiable shapes fall back to a single `expression = result` step.
+- The UI (`src/ui.py`) only imports the compiled `graph` (and `TutorState`) from `src/pipeline.py` — never import the nodes, student, or knowledge modules directly.
+- All math shown to the student is LaTeX wrapped in `$...$`; problems are pure notation; the error category is never displayed.
+- Solution derivations are SymPy-generated (`src/solution_steps.py`) and rendered verbatim — the LLM never writes math steps. Unverifiable shapes fall back to a single `expression = result` step.
 - The UI must stay responsive during LLM calls: consume `graph.stream` via `run.io_bound` chunk-by-chunk, never block the event loop.
+```

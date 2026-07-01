@@ -9,9 +9,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.agent.prompts import build_generate_problem_prompt
-from src.state import store
-from src.state.models import (
+from src.prompts import build_generate_problem_prompt
+from src import student as store
+from src.student import (
     StudentState,
     SubtopicMastery,
     TopicMastery,
@@ -64,7 +64,6 @@ def test_difficulty_eases_after_misses():
     )
     sm = store.update_subtopic_mastery(sm, False)  # 1.0 -> 0.7 -> band 4
     assert sm.current_difficulty == 4
-    assert sm.consecutive_correct == 0
 
 
 def test_difficulty_clamps_at_bounds():
@@ -112,7 +111,6 @@ def test_record_attempt_updates_topic_and_subtopic():
     key = subtopic_key("algebra", "linear_equations")
     assert key in state.subtopic_mastery
     assert state.subtopic_mastery[key].attempts == 1
-    assert state.subtopic_mastery[key].correct_attempts == 1
 
 
 def test_record_attempt_tracks_subtopic_errors():
@@ -189,7 +187,7 @@ def test_legacy_student_json_loads_with_defaults():
 # ── Weakness-targeted selection ──────────────────────────────────────────────
 
 def test_selection_favors_weak_subtopic(monkeypatch, tmp_path):
-    from src.agent import nodes
+    from src import pipeline as nodes
 
     monkeypatch.setattr(nodes, "STUDENT_STATE_DIR", tmp_path)
 
@@ -205,16 +203,15 @@ def test_selection_favors_weak_subtopic(monkeypatch, tmp_path):
                 subtopic=sub,
                 mastery_score=0.1 if weak else 0.95,
                 attempts=10,
-                correct_attempts=1 if weak else 9,
                 error_pattern_counts={"conceptual_error": 5} if weak else {},
             )
-    store.save_student(state, tmp_path)
+    state.save(tmp_path)
 
     random.seed(7)
     picks = []
     tutor_state = {"student_id": "weak_kid"}
     for _ in range(400):
-        result = nodes.select_topic_node(tutor_state)
+        result = nodes.setup_node(tutor_state)
         picks.append(result["current_subtopic"])
 
     weak_count = picks.count("proportions")
@@ -225,7 +222,7 @@ def test_selection_favors_weak_subtopic(monkeypatch, tmp_path):
 
 
 def test_selection_difficulty_tracks_topic_mastery(monkeypatch, tmp_path):
-    from src.agent import nodes
+    from src import pipeline as nodes
 
     monkeypatch.setattr(nodes, "STUDENT_STATE_DIR", tmp_path)
 
@@ -240,12 +237,12 @@ def test_selection_difficulty_tracks_topic_mastery(monkeypatch, tmp_path):
     # difficulty band, regardless of which subtopic is selected — so the student
     # never drops back to "Easy" while the bar reads ~100%.
     state.topic_mastery["algebra"] = TopicMastery(topic="algebra", mastery_score=0.99)
-    store.save_student(state, tmp_path)
+    state.save(tmp_path)
 
     random.seed(1)
     saw_algebra = False
     for _ in range(200):
-        result = nodes.select_topic_node({"student_id": "ramp_kid"})
+        result = nodes.setup_node({"student_id": "ramp_kid"})
         if result["current_topic"] == "algebra":
             saw_algebra = True
             assert result["current_difficulty"] == store.MAX_DIFFICULTY
@@ -255,7 +252,7 @@ def test_selection_difficulty_tracks_topic_mastery(monkeypatch, tmp_path):
 # ── Deterministic on-topic fallback (no LLM) ─────────────────────────────────
 
 def test_fallback_problem_is_on_topic_and_valid_for_every_subtopic():
-    from src.agent import nodes
+    from src import pipeline as nodes
 
     random.seed(3)
     for topic, subs in nodes.SUBTOPICS.items():

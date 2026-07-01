@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import html as html_lib
 import re
@@ -12,18 +12,14 @@ load_dotenv()
 
 from nicegui import context, run, ui
 
-from src.agent.graph import graph
-from src.agent.state import TutorState
+from src.pipeline import graph, TutorState
 
 NODE_LABELS = {
-    "load_state_node": "Loading student profile",
-    "select_topic_node": "Selecting topic and difficulty",
+    "setup_node": "Loading profile and selecting topic",
     "generate_problem_node": "Generating problem (Ollama)",
     "evaluate_answer_node": "Checking answer (SymPy symbolic solver)",
-    "retrieve_explanation_node": "Searching knowledge base (ChromaDB RAG)",
-    "generate_feedback_node": "Writing explanation (Ollama)",
+    "explain_node": "Searching knowledge base and writing explanation (ChromaDB RAG + Ollama)",
     "update_state_node": "Saving progress and updating mastery",
-    "adapt_next_node": "Adjusting difficulty",
 }
 
 TOPIC_LABELS = {
@@ -108,7 +104,6 @@ def initial_tutor_state(student_id: str) -> TutorState:
         "solution_steps": [],
         "student_answer": "",
         "evaluation": {},
-        "retrieved_chunks": [],
         "feedback": "",
         "mastery": {},
         "subtopic_mastery": {},

@@ -77,8 +77,8 @@ _DEFAULT_SPEC = (
 
 # Rotating "shape" hints injected into the generation prompt so the LLM varies
 # the STRUCTURE of problems (not just the numbers) within a subtopic. One hint is
-# chosen per generation. linear_relationships is generated deterministically and
-# is intentionally absent.
+# chosen per generation. linear_relationships and evaluating_expressions are
+# generated deterministically and are intentionally absent.
 SUBTOPIC_VARIANTS: dict[str, list[str]] = {
     "equivalent_fractions": [
         "a fraction whose numerator and denominator share a small common factor",
@@ -108,11 +108,6 @@ SUBTOPIC_VARIANTS: dict[str, list[str]] = {
         "a two-step equation like ax + b = c",
         "an equation with the variable on both sides, like ax + b = cx + d",
         "an equation with parentheses, like a(bx + c) = d",
-    ],
-    "evaluating_expressions": [
-        "a linear expression to evaluate",
-        "a quadratic expression to evaluate",
-        "an expression with a negative substitution value",
     ],
 }
 

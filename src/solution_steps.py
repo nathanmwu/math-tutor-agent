@@ -15,6 +15,8 @@ __all__ = [
     "generate_solution_steps",
     "slope_solution_steps",
     "linear_eval_solution_steps",
+    "poly_eval_solution_steps",
+    "polynomial_latex",
 ]
 
 
@@ -186,6 +188,57 @@ def linear_eval_solution_steps(m: int, k: int, v: int) -> list[str]:
         (rf"y = {arithmetic}", answer),
         (rf"y = {latex(answer)}", answer),
     )
+
+
+# ── Evaluating expressions (substitute a value into a polynomial) ─────────────
+
+def polynomial_latex(coeffs: list[int], base: str = "x") -> str:
+    """Render a polynomial 'a·base^d + … + c' (coeffs highest-degree-first) as
+    signed LaTeX. ``base`` is the variable rendering — 'x' for the problem
+    statement, or a parenthesized value like '(-8)' for the substitution step.
+
+    e.g. polynomial_latex([-2, 3, 1]) -> '-2x^{2} + 3x + 1'
+         polynomial_latex([-2, 3, 1], '(-8)') -> '-2(-8)^{2} + 3(-8) + 1'
+    """
+    d = len(coeffs) - 1
+    parts: list[str] = []
+    for i, c in enumerate(coeffs):
+        c, p = int(c), d - i
+        if c == 0:
+            continue
+        mag = abs(c)
+        mono = "" if p == 0 else base if p == 1 else f"{base}^{{{p}}}"
+        coef = "" if (mag == 1 and p != 0) else str(mag)
+        body = f"{coef}{mono}"
+        if not parts:
+            parts.append(f"-{body}" if c < 0 else body)
+        else:
+            parts.append(("- " if c < 0 else "+ ") + body)
+    return " ".join(parts) if parts else "0"
+
+
+def poly_eval_solution_steps(coeffs: list[int], v: int) -> list[str]:
+    """Worked derivation for evaluating a polynomial (coeffs highest-degree-first)
+    at x = v; every numeric equality verified. Starts from the problem expression,
+    substitutes, evaluates each term, then totals:
+
+        8x^2 - 14x + 7 = 8(23)^2 - 14(23) + 7 = 4232 - 322 + 7 = 3917
+    """
+    ints = [Integer(c) for c in coeffs]
+    v = Integer(v)
+    d = len(ints) - 1
+    term_values = [c * v ** (d - i) for i, c in enumerate(ints) if c != 0]
+    answer = sum(term_values, Integer(0))
+
+    states = [
+        (polynomial_latex(coeffs, "x"), None),            # restate the problem
+        (polynomial_latex(coeffs, f"({latex(v)})"), answer),  # substitute x = v
+    ]
+    term_sum = _terms_latex(term_values)                  # evaluate each term
+    if term_sum != latex(answer):
+        states.append((term_sum, answer))
+    states.append((latex(answer), answer))                # total
+    return _running_steps(*states)
 
 
 # ── Fraction arithmetic ───────────────────────────────────────────────────────

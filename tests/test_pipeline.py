@@ -14,8 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from dotenv import load_dotenv
 load_dotenv()
 
-from src.agent.graph import graph
-from src.agent.state import TutorState
+from src.pipeline import graph, TutorState
 
 
 def _fresh_config():
@@ -34,7 +33,6 @@ def _bootstrap(config) -> TutorState:
         "solution_steps": [],
         "student_answer": "",
         "evaluation": {},
-        "retrieved_chunks": [],
         "feedback": "",
         "mastery": {},
         "session_history": [],

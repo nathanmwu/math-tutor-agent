@@ -6,26 +6,55 @@ import random
 import re
 from math import gcd
 from pathlib import Path
+from typing import TypedDict
 
 from langchain_ollama import ChatOllama
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
 from sympy import Eq, Rational, simplify, solve, sympify
 
-from src.agent.state import TutorState
-from src.agent.prompts import (
+from src.prompts import (
     CATEGORIZE_ERROR_PROMPT,
     FEEDBACK_CORRECT_PROMPT,
     FEEDBACK_INCORRECT_PROMPT,
     SUBTOPIC_VARIANTS,
     build_generate_problem_prompt,
 )
-from src.agent.solution_steps import (
+from src.solution_steps import (
     generate_solution_steps,
     linear_eval_solution_steps,
+    poly_eval_solution_steps,
+    polynomial_latex,
     slope_solution_steps,
 )
-from src.knowledge.retriever import retrieve_content
-from src.state import store
-from src.state.models import SubtopicMastery, subtopic_key
+from src.knowledge import retrieve_content
+from src.student import (
+    StudentState,
+    SubtopicMastery,
+    difficulty_for_mastery,
+    problem_signature,
+    record_attempt,
+    subtopic_key,
+)
+
+
+class TutorState(TypedDict):
+    student_id: str
+    current_topic: str
+    current_subtopic: str
+    current_difficulty: int
+    current_problem: str
+    sympy_expression: str       # the raw computation, e.g. "Eq(2*x + 5, 11)"
+    sympy_answer: str           # SymPy-computed result; never shown before answering
+    solution_steps: list[str]   # SymPy-verified LaTeX derivation, rendered verbatim
+    student_answer: str
+    evaluation: dict
+    feedback: str
+    mastery: dict[str, float]
+    # Per-subtopic mastery summary for the UI focus-areas panel, keyed by
+    # subtopic_key(topic, subtopic) -> {"topic", "subtopic", "mastery_score"}.
+    subtopic_mastery: dict[str, dict]
+    session_history: list[dict]
 
 # Fraction of turns that ignore weakness-priority and pick a subtopic uniformly,
 # preserving coverage/variety so the agent never tunnels into one weak subtopic.
@@ -57,6 +86,11 @@ VALID_ERROR_CATEGORIES = {
     "conceptual_error",
     "other",
 }
+
+
+def _get_llm() -> ChatOllama:
+    """The single Ollama client used for every generation step."""
+    return ChatOllama(model=os.getenv("OLLAMA_MODEL", "llama3:8b"), temperature=0.7)
 
 
 def _parse_problem_json(raw: str) -> dict:
@@ -135,15 +169,6 @@ def _subtopic_mastery_summary(student) -> dict[str, dict]:
     }
 
 
-def load_state_node(state: TutorState) -> dict:
-    student = store.load_student(state["student_id"], STUDENT_STATE_DIR)
-    mastery = {topic: tm.mastery_score for topic, tm in student.topic_mastery.items()}
-    return {
-        "mastery": mastery,
-        "subtopic_mastery": _subtopic_mastery_summary(student),
-    }
-
-
 def _subtopic_priority(sm: SubtopicMastery) -> float:
     """Selection weight: higher = weaker = practice more.
 
@@ -155,20 +180,22 @@ def _subtopic_priority(sm: SubtopicMastery) -> float:
     return max(0.05, weakness + 0.5 * error_rate)
 
 
-def select_topic_node(state: TutorState) -> dict:
-    """Pick a (topic, subtopic) pair, favoring the student's weak subtopics.
+def setup_node(state: TutorState) -> dict:
+    """Load the student, surface their mastery for the UI, and pick the next
+    (topic, subtopic, difficulty) — favoring weak subtopics.
 
     Weighted-random over a transparent per-subtopic priority score, with a
     cold-start path that guarantees breadth and an exploration fraction that
-    preserves variety so the agent never tunnels into one subtopic.
+    preserves variety. Difficulty tracks the demonstrated topic mastery (the
+    same signal as the progress bar), so a strong student keeps getting
+    challenge problems even when a fresh subtopic is selected.
     """
-    student = store.load_student(state["student_id"], STUDENT_STATE_DIR)
+    student = StudentState.load_or_new(state["student_id"], STUDENT_STATE_DIR)
     candidates = [(t, st) for t in CURRICULUM_ORDER for st in SUBTOPICS[t]]
 
     never = [
         (t, st) for (t, st) in candidates if subtopic_key(t, st) not in student.subtopic_mastery
     ]
-
     if never and random.random() < COLD_START_FRACTION:
         topic, subtopic = random.choice(never)
     elif random.random() < EXPLORATION_FRACTION:
@@ -182,18 +209,15 @@ def select_topic_node(state: TutorState) -> dict:
         ]
         topic, subtopic = random.choices(candidates, weights=weights, k=1)[0]
 
-    # Difficulty tracks the mastery the student has demonstrated on this topic —
-    # the same signal as the progress bar — so a strong student gets challenge
-    # problems and never drops back to "Easy" just because a fresh subtopic was
-    # selected (subtopic mastery still drives WHICH subtopic, above).
     tm = student.topic_mastery.get(topic)
     topic_score = tm.mastery_score if tm is not None else 0.0
-    difficulty = store.difficulty_for_mastery(topic_score)
 
     return {
+        "mastery": {t: m.mastery_score for t, m in student.topic_mastery.items()},
+        "subtopic_mastery": _subtopic_mastery_summary(student),
         "current_topic": topic,
         "current_subtopic": subtopic,
-        "current_difficulty": difficulty,
+        "current_difficulty": difficulty_for_mastery(topic_score),
     }
 
 
@@ -245,7 +269,7 @@ def _build_linear_relationship_problem(
 
         if problem_text in seen_problems:
             continue
-        if avoid_signatures and store.problem_signature(problem_text) in avoid_signatures:
+        if avoid_signatures and problem_signature(problem_text) in avoid_signatures:
             continue
         return {
             "current_problem": problem_text,
@@ -254,7 +278,63 @@ def _build_linear_relationship_problem(
             "solution_steps": steps,
             "student_answer": "",
             "evaluation": {},
-            "retrieved_chunks": [],
+            "feedback": "",
+        }
+    return None
+
+
+def _substituted_expr(coeffs: list[int], v: int) -> str:
+    """Python/SymPy string of the polynomial with x replaced by v (for storage)."""
+    d = len(coeffs) - 1
+    vv = f"({v})" if v < 0 else str(v)
+    terms = []
+    for i, c in enumerate(coeffs):
+        p = d - i
+        mono = "" if p == 0 else (f"*{vv}" if p == 1 else f"*{vv}**{p}")
+        terms.append((c, f"{abs(c)}{mono}"))
+    s = ("-" if terms[0][0] < 0 else "") + terms[0][1]
+    for c, t in terms[1:]:
+        s += (" - " if c < 0 else " + ") + t
+    return s
+
+
+def _build_evaluating_expression_problem(
+    difficulty: int, seen_problems: set[str], avoid_signatures: set[str] | None = None
+) -> dict | None:
+    """Deterministically build an ``evaluating_expressions`` problem (linear or
+    quadratic). The prose, the answer, and the verified derivation all derive
+    from one set of integer coefficients and a substitution value, so they cannot
+    drift — the failure mode of letting the LLM hand-substitute (it would author
+    prose for one expression and a substituted arithmetic for another, e.g. show
+    "3x - 2x^2 + 1 at x=-8" but compute -511).
+    """
+    hi = 3 + 2 * difficulty
+
+    def _nz(lo: int, h: int) -> int:
+        return random.choice([n for n in range(lo, h + 1) if n != 0])
+
+    for _ in range(50):
+        v = _nz(-hi, hi)  # never x = 0 (it collapses the expression)
+        if difficulty <= 2:
+            coeffs = [_nz(-hi, hi), _nz(-hi, hi)]                 # a x + b
+        else:
+            coeffs = [_nz(-hi, hi), _nz(-hi, hi), _nz(-hi, hi)]   # a x^2 + b x + c
+
+        problem_text = rf"Evaluate ${polynomial_latex(coeffs, 'x')}$ at $x = {v}$"
+        if problem_text in seen_problems:
+            continue
+        if avoid_signatures and problem_signature(problem_text) in avoid_signatures:
+            continue
+
+        d = len(coeffs) - 1
+        answer = sum(c * v ** (d - i) for i, c in enumerate(coeffs))
+        return {
+            "current_problem": problem_text,
+            "sympy_answer": str(answer),
+            "sympy_expression": _substituted_expr(coeffs, v),
+            "solution_steps": poly_eval_solution_steps(coeffs, v),
+            "student_answer": "",
+            "evaluation": {},
             "feedback": "",
         }
     return None
@@ -302,7 +382,6 @@ def _finalize_problem(
             "solution_steps": generate_solution_steps(sympy_expression),
             "student_answer": "",
             "evaluation": {},
-            "retrieved_chunks": [],
             "feedback": "",
         }
     except Exception:
@@ -368,12 +447,10 @@ def _fallback_problem(
             problem_text = rf"${a}x {sign} {abs(b)} = {c}$,  $x = ?$"
             sympy_expression = f"Eq({a}*x {sign} {abs(b)}, {c})"
         elif subtopic == "evaluating_expressions":
-            m = random.randint(2, 2 + difficulty)
-            k = _nonzero(-hi, hi)
-            v = random.randint(1, hi)
-            sign = "+" if k >= 0 else "-"
-            problem_text = rf"Evaluate ${m}x {sign} {abs(k)}$ at $x = {v}$"
-            sympy_expression = f"{m}*{v} {sign} {abs(k)}"
+            built = _build_evaluating_expression_problem(difficulty, seen_problems)
+            if built is not None:
+                return built
+            continue
 
         if problem_text is None:
             continue
@@ -389,20 +466,27 @@ def generate_problem_node(state: TutorState) -> dict:
     seen_problems = {item.get("problem_text", "") for item in history}
 
     # Persisted cross-session avoid-list of problem SHAPES for this subtopic.
-    student = store.load_student(state["student_id"], STUDENT_STATE_DIR)
+    student = StudentState.load_or_new(state["student_id"], STUDENT_STATE_DIR)
     key = subtopic_key(state["current_topic"], state["current_subtopic"])
     persisted_signatures = student.recent_signatures.get(key, [])
 
-    # linear_relationships is generated deterministically (no LLM): the prose and
-    # the answer must come from one source of truth, never drift apart.
+    # linear_relationships and evaluating_expressions are generated deterministically
+    # (no LLM): the prose, the answer, and the derivation come from one source of
+    # truth, so they can never drift apart (the LLM hand-substituting was unreliable).
     if state["current_subtopic"] == "linear_relationships":
         built = _build_linear_relationship_problem(
             state["current_difficulty"], seen_problems, set(persisted_signatures)
         )
         if built is not None:
             return built
+    if state["current_subtopic"] == "evaluating_expressions":
+        built = _build_evaluating_expression_problem(
+            state["current_difficulty"], seen_problems, set(persisted_signatures)
+        )
+        if built is not None:
+            return built
 
-    llm = ChatOllama(model=os.getenv("OLLAMA_MODEL", "llama3:8b"), temperature=0.7)
+    llm = _get_llm()
 
     recent = history[-5:] if len(history) >= 5 else history
     recent_problems = (
@@ -481,7 +565,7 @@ def evaluate_answer_node(state: TutorState) -> dict:
             }
         }
 
-    llm = ChatOllama(model=os.getenv("OLLAMA_MODEL", "llama3:8b"), temperature=0.7)
+    llm = _get_llm()
     prompt = CATEGORIZE_ERROR_PROMPT.format(
         problem=state["current_problem"],
         correct_answer=state["sympy_answer"],
@@ -502,48 +586,41 @@ def evaluate_answer_node(state: TutorState) -> dict:
     }
 
 
-def retrieve_explanation_node(state: TutorState) -> dict:
-    evaluation = state.get("evaluation", {})
-    error_category = evaluation.get("error_category")
+def explain_node(state: TutorState) -> dict:
+    """Retrieve grounding chunks (RAG) and write the concept-note feedback.
 
+    The math derivation is the SymPy-verified ``solution_steps``; the LLM writes
+    only a short note, grounded in the retrieved knowledge-base content.
+    """
+    evaluation = state.get("evaluation", {})
     chunks = retrieve_content(
         topic=state["current_topic"],
         subtopic=state["current_subtopic"],
         difficulty=state["current_difficulty"],
         chroma_dir=CHROMA_DIR,
-        error_category=error_category,
+        error_category=evaluation.get("error_category"),
         query_text=state.get("current_problem"),
     )
-    return {"retrieved_chunks": chunks}
-
-
-def generate_feedback_node(state: TutorState) -> dict:
-    evaluation = state.get("evaluation", {})
-    chunks = state.get("retrieved_chunks", [])
-    retrieved_content = "\n---\n".join(chunks) if chunks else ""
     steps = state.get("solution_steps", [])
-
     template = (
         FEEDBACK_CORRECT_PROMPT
         if evaluation.get("is_correct", False)
         else FEEDBACK_INCORRECT_PROMPT
     )
-    llm = ChatOllama(model=os.getenv("OLLAMA_MODEL", "llama3:8b"), temperature=0.7)
     prompt = template.format(
         problem=state["current_problem"],
         student_answer=state["student_answer"],
         correct_answer=state["sympy_answer"],
         solution_steps="\n".join(steps) if steps else "(not available)",
-        retrieved_content=retrieved_content,
+        retrieved_content="\n---\n".join(chunks) if chunks else "",
     )
-    response = llm.invoke(prompt)
-    return {"feedback": response.content.strip()}
+    return {"feedback": _get_llm().invoke(prompt).content.strip()}
 
 
 def update_state_node(state: TutorState) -> dict:
     evaluation = state.get("evaluation", {})
-    student = store.load_student(state["student_id"], STUDENT_STATE_DIR)
-    student = store.record_attempt(
+    student = StudentState.load_or_new(state["student_id"], STUDENT_STATE_DIR)
+    student = record_attempt(
         state=student,
         topic=state["current_topic"],
         subtopic=state["current_subtopic"],
@@ -554,7 +631,7 @@ def update_state_node(state: TutorState) -> dict:
         error_category=evaluation.get("error_category"),
         parse_error=evaluation.get("parse_error", False),
     )
-    store.save_student(student, STUDENT_STATE_DIR)
+    student.save(STUDENT_STATE_DIR)
 
     mastery = {topic: tm.mastery_score for topic, tm in student.topic_mastery.items()}
 
@@ -576,8 +653,25 @@ def update_state_node(state: TutorState) -> dict:
     }
 
 
-def adapt_next_node(state: TutorState) -> dict:
-    # Difficulty is now per-subtopic and authoritative: every "Next problem"
-    # re-enters the graph at load_state -> select_topic, which recomputes
-    # difficulty from the freshly-saved subtopic mastery. Nothing to adjust here.
-    return {"current_difficulty": state.get("current_difficulty", 2)}
+# ── Graph ─────────────────────────────────────────────────────────────────────
+# A linear tutoring loop with one human-in-the-loop pause: after generate_problem
+# the graph interrupts; the UI submits the student's answer and resumes at
+# evaluate_answer. Next-turn difficulty is recomputed in setup_node from the
+# freshly-saved mastery, so no separate "adapt" step is needed.
+_builder = StateGraph(TutorState)
+_builder.add_node("setup_node", setup_node)
+_builder.add_node("generate_problem_node", generate_problem_node)
+_builder.add_node("evaluate_answer_node", evaluate_answer_node)
+_builder.add_node("explain_node", explain_node)
+_builder.add_node("update_state_node", update_state_node)
+
+_builder.add_edge(START, "setup_node")
+_builder.add_edge("setup_node", "generate_problem_node")
+_builder.add_edge("generate_problem_node", "evaluate_answer_node")
+_builder.add_edge("evaluate_answer_node", "explain_node")
+_builder.add_edge("explain_node", "update_state_node")
+_builder.add_edge("update_state_node", END)
+
+graph = _builder.compile(
+    checkpointer=MemorySaver(), interrupt_before=["evaluate_answer_node"]
+)

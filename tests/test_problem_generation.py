@@ -22,8 +22,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langchain_ollama import ChatOllama
-from src.agent.nodes import _build_linear_relationship_problem, _parse_problem_json
-from src.agent.prompts import build_generate_problem_prompt
+from src.pipeline import (
+    _build_evaluating_expression_problem,
+    _build_linear_relationship_problem,
+    _parse_problem_json,
+)
+from src.prompts import build_generate_problem_prompt
 
 
 MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
@@ -177,6 +181,26 @@ def test_linear_relationship_answer_never_drifts_from_prose():
             assert built["solution_steps"]
             assert built["solution_steps"][0].startswith(("$m =", "$y ="))
     assert checked_slopes > 0, "no slope-form problems were generated to check"
+
+
+def test_evaluating_expression_never_drifts_and_steps_start_from_problem():
+    """Deterministic generation: the prose, the stored answer, and the derivation
+    all agree, and the derivation starts from the displayed expression — the
+    regression that showed 'Evaluate $3x - 2x^2 + 1$ at x=-8' but computed -511."""
+    seen = set()
+    for difficulty in range(1, 6):
+        for _ in range(40):
+            b = _build_evaluating_expression_problem(difficulty, seen)
+            assert b is not None
+            seen.add(b["current_problem"])
+            # the stored answer is exactly the evaluation of the stored expression
+            assert sympify(b["sympy_expression"]) == sympify(b["sympy_answer"])
+            steps = b["solution_steps"]
+            assert len(steps) >= 3
+            # step 1 restates the expression shown in the prose (no drift)
+            assert steps[0].strip("$") == b["current_problem"].split("$")[1]
+            # the final step is the verified answer
+            assert sympify(steps[-1].strip("$")) == sympify(b["sympy_answer"])
 
 
 @pytest.mark.parametrize("topic,subtopic,difficulty", CASES)

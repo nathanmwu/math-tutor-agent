@@ -35,16 +35,16 @@ An adaptive K-12 math tutoring agent that presents problems, evaluates student a
 
 ### FR-4: Student State
 - The system must persist student state across sessions in `data/students/{student_id}.json`.
-- State must include: mastery score per topic (float 0.0–1.0), attempt count per topic, error pattern counts per topic, and full session history (attempt records).
-- Mastery scores must update after each attempt using EMA: `new = 0.8 * old + 0.2 * (1.0 if correct else 0.0)`.
+- State must include: mastery per topic and per subtopic (float 0.0–1.0), attempt and error-pattern counts, recent problem-shape signatures (a per-subtopic avoid-list), and full session history (attempt records).
+- Mastery scores must update after each attempt using an EMA: `new = 0.7 * old + 0.3 * (1.0 if correct else 0.0)`, snapping to 1.0 once a correct answer brings the score within 0.05 of full.
 
 ### FR-5: Adaptive Topic and Difficulty Selection
-- Topic selection must prioritize topics where the student's mastery is lowest (weakest-first), with a 30% chance of introducing a topic the student has not yet attempted (exploration).
-- Difficulty must adapt per-topic: increment by 1 on correct answer, decrement by 1 on wrong answer, clamped to [1, 5].
-- A new student with no prior state must start at difficulty 2 on the first topic in the curriculum sequence.
+- Selection operates at the subtopic level and favors weakness: a cold-start pick of a never-attempted subtopic, an exploration fraction that keeps coverage broad, and otherwise a weighted-random draw by a weakness priority (low mastery + recent errors).
+- Difficulty tracks demonstrated mastery rather than a separate counter: `difficulty = clamp(int(mastery * 5) + 1, 1, 5)`, so it moves with the progress bar.
+- A new student with no prior state begins from the cold-start path over the curriculum sequence (fractions_ratios → algebra) at the introductory band.
 
 ### FR-6: Session UI
-- The UI is a NiceGUI app: a single Python process serving an event-driven web interface, launched with `python src/ui/app.py`.
+- The UI is a NiceGUI app: a single Python process serving an event-driven web interface, launched with `python src/ui.py`.
 - It must show: the current problem (LaTeX typeset via KaTeX), answer input, feedback after submission (LaTeX typeset), current mastery scores per topic (progress bars), and session attempt count.
 - It must show a **live operation feed** while the agent works — one line per completed graph node (e.g. "Checking answer (SymPy symbolic solver)", "Searching knowledge base (ChromaDB RAG)") — so the under-the-hood pipeline is transparent.
 - The session has two phases: *answering* (problem + input) and *reviewing* (problem + result banner + explanation + "Next problem" button). A new problem is generated only when the student advances.
@@ -97,7 +97,7 @@ The LangGraph graph is invoked with a partial `TutorState`. The UI calls the gra
     "student_answer": ""        # empty string signals: generate new problem
 }
 
-# Output (full state after graph pause at present_problem node)
+# Output (full state after the graph pauses before evaluate_answer)
 {
     "current_problem": str,     # human-readable problem text
     "current_topic": str,
@@ -136,8 +136,10 @@ def retrieve_content(
     topic: str,
     subtopic: str | None,
     difficulty: int,
+    chroma_dir: Path,
     error_category: str | None = None,
-    n_results: int = 3
+    n_results: int = 3,
+    query_text: str | None = None,
 ) -> list[str]:
     """
     Returns a list of document text strings (chunk bodies).
@@ -155,15 +157,15 @@ The LLM prompt must instruct the model to return JSON conforming to:
 
 ```json
 {
-  "problem_text": "Solve for x: 3x - 5 = 10",
-  "sympy_answer": "5",
+  "problem_text": "$3x - 5 = 10$,  $x = ?$",
+  "sympy_expression": "Eq(3*x - 5, 10)",
   "topic": "algebra",
   "subtopic": "linear_equations",
   "difficulty": 3
 }
 ```
 
-The node must validate this schema (Pydantic or manual check) and retry up to 2 times if the response is malformed or `sympy_answer` fails `sympify()`.
+The node parses and repairs this JSON, evaluates `sympy_expression` with SymPy itself to derive the answer, and retries up to 3 times (then a deterministic on-topic fallback) if the response is malformed or does not reduce to a concrete number.
 
 ---
 
@@ -203,24 +205,28 @@ class AttemptRecord(BaseModel):
 class TopicMastery(BaseModel):
     topic: str
     mastery_score: float           # 0.0–1.0, EMA-updated
-    current_difficulty: int        # 1–5, per-topic
+    current_difficulty: int        # 1–5
     attempts: int
-    correct_attempts: int
     error_pattern_counts: dict[str, int]   # error_category → count
     last_updated: datetime
+
+# SubtopicMastery has the same shape (plus a subtopic field) and is keyed by
+# subtopic_key(topic, subtopic). It is the granularity personalization uses.
 
 class StudentState(BaseModel):
     student_id: str
     created_at: datetime
     last_active: datetime
     topic_mastery: dict[str, TopicMastery]
+    subtopic_mastery: dict[str, SubtopicMastery]
+    recent_signatures: dict[str, list[str]]   # per-subtopic problem-shape avoid-list
     attempt_history: list[AttemptRecord]
 
     def save(self, base_dir: Path) -> None: ...
     @classmethod
     def load(cls, student_id: str, base_dir: Path) -> "StudentState": ...
     @classmethod
-    def new(cls, student_id: str) -> "StudentState": ...
+    def load_or_new(cls, student_id: str, base_dir: Path) -> "StudentState": ...
 ```
 
 ---
@@ -245,8 +251,7 @@ class StudentState(BaseModel):
 - Multi-student sessions (concurrent users)
 - Authentication / login
 - Proof-based or open-response questions
-- LaTeX rendering (plain text problems only in v1)
-- Streaming LLM output to UI
+- Token-level streaming of LLM output to the UI (the op feed streams per-node, not per-token)
 - Automated knowledge base generation (all chunks are hand-authored)
 - Any cloud deployment — fully local
 
